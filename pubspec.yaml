@@ -1,0 +1,86 @@
+name: ontour
+description: Kompass-, Tacho- und Karten-App für Android
+publish_to: 'none'
+version: 1.0.0+5
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # Standort- und Geschwindigkeitsermittlung (GPS/Netzwerk)
+  geolocator: ^14.0.3
+
+  # Magnetkompass (Himmelsrichtung des Geräts)
+  flutter_compass: ^0.8.1
+
+  # Kartendarstellung auf Basis von OpenStreetMap (kein API-Key nötig)
+  flutter_map: ^8.3.2
+  latlong2: ^0.10.1
+
+  # Persistieren von Einstellungen (Anzeigemodus, gewählte Einheit)
+  shared_preferences: ^2.5.5
+
+  # Beschleunigungssensor zur Stillstands-Erkennung (unterdrückt GPS-
+  # Rauschen in der Geschwindigkeitsanzeige, siehe motion_service.dart)
+  sensors_plus: ^7.1.0
+
+  # Zahlenformatierung (deutsches Komma als Dezimaltrennzeichen)
+  intl: ^0.20.3
+
+  # Automatische Silbentrennung für deutsche Fließtexte in der gesamten App
+  auto_hyphenating_text: ^0.3.2
+
+  # Hält den Bildschirm während der Tacho- bzw. Kompass-Anzeige wach
+  wakelock_plus: ^1.8.0
+
+  # Liefert Name/Version der App zur Laufzeit für die Info-Seite
+  package_info_plus: ^10.2.1
+
+  # Liefert das app-eigene Dokumentenverzeichnis, in dem aufgezeichnete
+  # Tracks als JSON-Dateien abgelegt werden (siehe track_storage_service.dart)
+  path_provider: ^2.1.6
+
+  # XML-Erzeugung/-Parsing für den GPX-Import/-Export von Tracks
+  # (siehe util/gpx_converter.dart, README Abschnitt 20)
+  xml: ^7.0.1
+
+  # Öffnet den nativen Android-"Teilen"-Dialog zum Exportieren eines
+  # Tracks als GPX-Datei (siehe services/track_import_export_service.dart,
+  # README Abschnitt 20)
+  share_plus: ^13.3.0
+
+  # Datei-Auswahl-Dialog zum Importieren einer GPX-Datei (siehe
+  # services/track_import_export_service.dart, README Abschnitt 20)
+  file_picker: ^12.2.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+  # Erzeugt aus einer einzigen Bilddatei alle Android-Launcher-Icon-
+  # Größen (inkl. adaptiver Icons). Die App wird ausschließlich unter
+  # Android genutzt, daher keine iOS-Konfiguration.
+  flutter_launcher_icons: ^0.14.4
+
+flutter:
+  uses-material-design: true
+
+# Konfiguration für `dart run flutter_launcher_icons` (siehe README,
+# Abschnitt "App-Icon"). image_path liefert das Vollbild-Icon,
+# adaptive_icon_foreground/-background das zweigeteilte Icon für
+# Android 8+ ("adaptive icons" - der Launcher maskiert es je nach
+# Gerät/Launcher in Kreis-, Squircle- oder andere Formen).
+# adaptive_icon_background zeigt bewusst auf ein eigenes Verlaufsbild
+# (nicht nur eine Flächenfarbe), damit der Farbverlauf des Vollbild-Icons
+# auch bei adaptiven Icons erhalten bleibt. Die App wird ausschließlich
+# unter Android genutzt, daher keine iOS-Konfiguration.
+flutter_launcher_icons:
+  android: "launcher_icon"
+  image_path: "assets/icon/icon.png"
+  min_sdk_android: 21
+  adaptive_icon_background: "assets/icon/icon_background.png"
+  adaptive_icon_foreground: "assets/icon/icon_foreground.png"
