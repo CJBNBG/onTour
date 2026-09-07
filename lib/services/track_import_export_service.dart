@@ -29,7 +29,9 @@ class TrackImportExportService {
     final file = File('${tempDir.path}/${_fileNameFor(track)}');
     await file.writeAsString(gpxContent);
 
-    await Share.shareXFiles([XFile(file.path)], text: track.name);
+    await SharePlus.instance.share(
+      ShareParams(files: [XFile(file.path)], text: track.name),
+    );
   }
 
   /// Öffnet den nativen Datei-Auswahl-Dialog (Paket `file_picker`,
@@ -39,18 +41,25 @@ class TrackImportExportService {
   /// aufrufenden Seite (siehe TrackPage), damit diese z. B. nach dem
   /// Import noch die Liste neu laden oder eine Bestätigung anzeigen kann.
   ///
+  /// WICHTIG (API seit file_picker 12): `FilePicker.pickFiles()` wird
+  /// direkt statisch aufgerufen (kein `FilePicker.platform`-Umweg mehr,
+  /// das Paket wurde auf eine föderierte Plugin-Architektur umgestellt)
+  /// und liefert eine `List<PlatformFile>` statt eines `FilePickerResult?`
+  /// - eine leere Liste bedeutet "Nutzer hat abgebrochen", nicht mehr
+  /// `null`. Siehe README Abschnitt 20.
+  ///
   /// Wirft eine [FormatException] weiter nach oben, wenn die gewählte
   /// Datei kein auswertbares GPX enthält (siehe GpxConverter.decode) - die
   /// aufrufende Seite fängt das ab und zeigt eine verständliche
   /// Fehlermeldung an.
   Future<RecordedTrack?> pickAndImportTrack() async {
-    final result = await FilePicker.platform.pickFiles(
+    final files = await FilePicker.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['gpx'],
     );
-    if (result == null || result.files.isEmpty) return null;
+    if (files.isEmpty) return null; // Nutzer hat den Dialog abgebrochen
 
-    final path = result.files.single.path;
+    final path = files.single.path;
     if (path == null) return null; // sollte auf Android praktisch nicht vorkommen
 
     final content = await File(path).readAsString();
