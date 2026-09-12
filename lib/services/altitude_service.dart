@@ -56,9 +56,19 @@ class AltitudeService {
             position.altitudeAccuracy.isFinite && position.altitudeAccuracy >= 0
                 ? position.altitudeAccuracy
                 : null;
+        // Horizontale Positionsgenauigkeit (bezieht sich auf lat/lng, NICHT
+        // auf die Höhe) - für die Genauigkeitsanzeige unterhalb der
+        // DMS-Position auf der Kompass-Seite.
+        final positionAccuracy =
+            position.accuracy.isFinite && position.accuracy >= 0
+                ? position.accuracy
+                : null;
         _controller?.add(AltitudeReading(
           altitudeMeters: position.altitude,
           altitudeAccuracyMeters: accuracy,
+          latitude: position.latitude,
+          longitude: position.longitude,
+          positionAccuracyMeters: positionAccuracy,
           timestamp: position.timestamp,
         ));
       },

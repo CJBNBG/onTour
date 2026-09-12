@@ -208,6 +208,19 @@ class _SpeedPageState extends State<SpeedPage> {
           )
         : '-';
 
+    // Zerlegt die formatierte Zahl (z. B. "12,3") in den Vorkommateil
+    // ("12", normale Größe) und die EINE Nachkommastelle ("3") - Letztere
+    // wird in _buildSpeedNumber hochgestellt und in ca. einem Drittel der
+    // Größe direkt hinter der Zahl dargestellt. Ohne aktuelle Messung
+    // (speedText == "-") gibt es kein Komma, decimalDigit bleibt dann null.
+    var integerPart = speedText;
+    String? decimalDigit;
+    final commaIndex = speedText.indexOf(',');
+    if (commaIndex != -1) {
+      integerPart = speedText.substring(0, commaIndex);
+      decimalDigit = speedText.substring(commaIndex + 1);
+    }
+
     final accuracyDisplayValue = reading?.speedAccuracyMetersPerSecond != null
         ? unit.fromMetersPerSecond(reading!.speedAccuracyMetersPerSecond!)
         : null;
@@ -224,7 +237,7 @@ class _SpeedPageState extends State<SpeedPage> {
           child: Center(
             child: FittedBox(
               fit: BoxFit.contain,
-              child: SevenSegmentDisplay(text: speedText),
+              child: _buildSpeedNumber(integerPart, decimalDigit),
             ),
           ),
         ),
@@ -238,14 +251,14 @@ class _SpeedPageState extends State<SpeedPage> {
         const SizedBox(height: 12),
         AutoHyphenatingText(
           SpeedFormatter.formatAccuracy(accuracyDisplayValue, unit),
-          style: Theme.of(context).textTheme.bodySmall,
+          style: _readableInfoStyle(context),
         ),
         const SizedBox(height: 4),
         AutoHyphenatingText(
           _satelliteCount != null
               ? 'Satelliten (Fix): $_satelliteCount'
               : 'Satelliten: nicht verfügbar',
-          style: Theme.of(context).textTheme.bodySmall,
+          style: _readableInfoStyle(context),
         ),
         const SizedBox(height: 4),
         // Diese Zeile ist bewusst IMMER sichtbar (nicht nur bei aktiver
@@ -255,13 +268,50 @@ class _SpeedPageState extends State<SpeedPage> {
         // Flackern der Geschwindigkeitsanzeige selbst wie ein zweites,
         // unabhängiges Flackern des Layouts.
         AutoHyphenatingText(
-          stationaryOverrideActive ? 'Stillstand erkannt - Anzeige auf 0 korrigiert' : '-',
-          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                fontStyle: FontStyle.italic,
-              ),
+          stationaryOverrideActive ? 'Stillstand erkannt - Anzeige auf 0 korrigiert' : 'Messung aktiv',
+          style: _readableInfoStyle(context)?.copyWith(fontStyle: FontStyle.italic),
         ),
         const SizedBox(height: 24),
         _buildUnitSelector(context, unit),
+      ],
+    );
+  }
+
+  /// Textstil für die drei Info-Zeilen unterhalb der Einheiten-Angabe
+  /// (Genauigkeit, Satellitenanzahl, Stillstands-/Messungs-Status) - auf
+  /// Wunsch etwa doppelt so groß wie das normale bodySmall, damit sie
+  /// auch während der Fahrt (z. B. im Randbereich des Blickfelds) gut
+  /// lesbar sind.
+  TextStyle? _readableInfoStyle(BuildContext context) {
+    final base = Theme.of(context).textTheme.bodySmall;
+    final baseFontSize = base?.fontSize;
+    if (base == null || baseFontSize == null) return base;
+    return base.copyWith(fontSize: baseFontSize * 2);
+  }
+
+  /// Baut die Geschwindigkeitsanzeige aus dem Vorkommateil (normale
+  /// Sieben-Segment-Größe) und - sofern vorhanden - der einen
+  /// Nachkommastelle, die deutlich kleiner (ca. ein Drittel der Höhe) und
+  /// per Row-Ausrichtung am oberen Rand ("hochgestellt", wie ein
+  /// Exponent) direkt dahinter angezeigt wird, statt wie zuvor als
+  /// gleich große Ziffer nach einem Komma.
+  Widget _buildSpeedNumber(String integerPart, String? decimalDigit) {
+    const mainHeight = 160.0; // Standardhöhe von SevenSegmentDisplay
+    const decimalHeight = mainHeight / 3;
+
+    if (decimalDigit == null) {
+      return SevenSegmentDisplay(text: integerPart, height: mainHeight);
+    }
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        SevenSegmentDisplay(text: integerPart, height: mainHeight),
+        Padding(
+          padding: const EdgeInsets.only(top: 4),
+          child: SevenSegmentDisplay(text: decimalDigit, height: decimalHeight),
+        ),
       ],
     );
   }

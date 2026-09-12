@@ -39,6 +39,9 @@ class BarometerAltitudeService {
 
   double? _referencePressureHPa;
   double? _referenceAltitudeMeters;
+  double? _referenceLatitude;
+  double? _referenceLongitude;
+  double? _referencePositionAccuracyMeters;
   double? _lastPressureHPa;
 
   /// true, sobald mindestens einmal kalibriert wurde (siehe [calibrate])
@@ -46,16 +49,28 @@ class BarometerAltitudeService {
   bool get isCalibrated => _referencePressureHPa != null;
 
   /// Setzt/aktualisiert den Referenzpunkt für die Barometer-Berechnung.
+  /// [referenceLatitude]/[referenceLongitude]/[referencePositionAccuracyMeters]
+  /// werden NICHT für die eigentliche Höhenberechnung benötigt, sondern
+  /// nur "durchgereicht" - der Barometer selbst kennt weder Position noch
+  /// deren Genauigkeit, die von ihm erzeugten [AltitudeReading]s sollen
+  /// aber trotzdem beides (die zuletzt bekannten GPS-Werte) für die
+  /// Positionsanzeige auf der Kompass-Seite enthalten.
   /// [referencePressureHPa] kann weggelassen werden, dann wird der
   /// zuletzt vom Sensor gelieferte Druckwert verwendet (sofern bereits
   /// einer vorliegt).
   void calibrate({
     required double referenceAltitudeMeters,
+    required double referenceLatitude,
+    required double referenceLongitude,
+    double? referencePositionAccuracyMeters,
     double? referencePressureHPa,
   }) {
     final pressure = referencePressureHPa ?? _lastPressureHPa;
     if (pressure == null) return; // noch kein Luftdruckwert vorhanden
     _referenceAltitudeMeters = referenceAltitudeMeters;
+    _referenceLatitude = referenceLatitude;
+    _referenceLongitude = referenceLongitude;
+    _referencePositionAccuracyMeters = referencePositionAccuracyMeters;
     _referencePressureHPa = pressure;
   }
 
@@ -90,6 +105,13 @@ class BarometerAltitudeService {
           // die absolute Richtigkeit hängt weiterhin von der Güte der
           // letzten GPS-Kalibrierung ab, siehe Klassen-Dokumentation.
           altitudeAccuracyMeters: 0.3,
+          // Position stammt vom letzten Kalibrierungszeitpunkt (siehe
+          // calibrate()) - der Barometer selbst liefert keine eigene
+          // Position, aktualisiert sich aber ohnehin bei jeder neuen
+          // GPS-Höhenmessung erneut.
+          latitude: _referenceLatitude!,
+          longitude: _referenceLongitude!,
+          positionAccuracyMeters: _referencePositionAccuracyMeters,
           timestamp: DateTime.now(),
         ));
       },
@@ -111,6 +133,9 @@ class BarometerAltitudeService {
     _controller = null;
     _referencePressureHPa = null;
     _referenceAltitudeMeters = null;
+    _referenceLatitude = null;
+    _referenceLongitude = null;
+    _referencePositionAccuracyMeters = null;
     _lastPressureHPa = null;
   }
 }

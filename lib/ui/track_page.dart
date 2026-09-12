@@ -202,7 +202,15 @@ class _TrackPageState extends State<TrackPage> {
           // Bildschirmtastatur viel vertikalen Platz einnimmt - siehe auch
           // die bewusst entfernte autofocus-Eigenschaft direkt darunter.
           scrollable: true,
-          title: AutoHyphenatingText('Aufzeichnung beenden'),
+          // WICHTIG (Fehlerkorrektur): title bewusst als normales Text-
+          // Widget statt AutoHyphenatingText. Bei scrollable: true packt
+          // Flutter title UND content GEMEINSAM in einen scrollbaren
+          // Bereich, der Teil derselben intrinsischen
+          // Breitenberechnung ist wie unten die Aktionsleiste (siehe
+          // Kommentar dort) - ein alleiniges Korrigieren der actions
+          // reichte deshalb nicht aus, der Fehler trat weiterhin auf,
+          // solange der title noch AutoHyphenatingText verwendete.
+          title: const Text('Aufzeichnung beenden'),
           content: TextField(
             controller: controller,
             // WICHTIG: bewusst KEIN autofocus. Mit autofocus öffnet sich
@@ -218,17 +226,31 @@ class _TrackPageState extends State<TrackPage> {
             decoration: const InputDecoration(labelText: 'Name des Tracks'),
           ),
           actions: [
+            // WICHTIG: Bewusst normale Text-Widgets statt
+            // AutoHyphenatingText - AlertDialog legt seine actions über
+            // ein OverflowBar an, das bei zu wenig Platz (hier: drei
+            // Buttons, einer mit dem langen Text "Weiter aufzeichnen")
+            // die intrinsische Breite jedes Kindes berechnet, um zu
+            // entscheiden, ob es umbrechen muss. AutoHyphenatingText
+            // nutzt dafür intern einen LayoutBuilder, der laut
+            // Flutter-Dokumentation KEINE intrinsischen Berechnungen
+            // unterstützt ("LayoutBuilder does not support returning
+            // intrinsic dimensions") - dieselbe bereits bekannte
+            // Einschränkung wie beim SegmentedButton (siehe README
+            // Abschnitt 13), hier aber durch OverflowBar statt
+            // SegmentedButton ausgelöst. Bei so kurzen Beschriftungen ist
+            // Silbentrennung ohnehin nie nötig.
             TextButton(
               onPressed: () => Navigator.of(dialogContext).pop(_StopDialogAction.cancel),
-              child: AutoHyphenatingText('Weiter aufzeichnen'),
+              child: const Text('Weiter aufzeichnen'),
             ),
             TextButton(
               onPressed: () => Navigator.of(dialogContext).pop(_StopDialogAction.discard),
-              child: AutoHyphenatingText('Verwerfen'),
+              child: const Text('Verwerfen'),
             ),
             FilledButton(
               onPressed: () => Navigator.of(dialogContext).pop(_StopDialogAction.save),
-              child: AutoHyphenatingText('Speichern'),
+              child: const Text('Speichern'),
             ),
           ],
         ),
@@ -255,22 +277,46 @@ class _TrackPageState extends State<TrackPage> {
     }
   }
 
-  Future<void> _handleDelete(RecordedTrack track) async {
+  /// Löscht einen gespeicherten Track (mit Bestätigungsdialog) - wird aus
+  /// der noch GEÖFFNETEN Bottom Sheet heraus aufgerufen (siehe
+  /// [_showSavedTracksSheet]). [setModalState] ist deren lokaler
+  /// Rebuild-Callback: Ohne den zusätzlichen Aufruf hier würde der
+  /// gelöschte Track in der bereits sichtbaren Liste fälschlich stehen
+  /// bleiben, bis das Sheet geschlossen und erneut geöffnet wird - siehe
+  /// Erklärung in [_showSavedTracksSheet]. [sheetContext] (der
+  /// `BuildContext` der Sheet-eigenen `StatefulBuilder`-Ebene) dient
+  /// ausschließlich der `mounted`-Prüfung direkt davor - falls das Sheet
+  /// während der asynchronen Lösch-Operation zwischenzeitlich geschlossen
+  /// wurde, würde `setModalState` sonst einen Fehler werfen.
+  Future<void> _handleDelete(
+    RecordedTrack track,
+    BuildContext sheetContext,
+    StateSetter setModalState,
+  ) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: AutoHyphenatingText('Track löschen?'),
-        content: AutoHyphenatingText(
+        // title/content bewusst als normale Text-Widgets statt
+        // AutoHyphenatingText - siehe ausführliche Begründung beim
+        // "Beenden"-Dialog weiter oben (_handleStop): Flutters interne
+        // Dialog-Layout-Mechanik führt an mehreren Stellen intrinsische
+        // Breitenberechnungen durch, mit denen AutoHyphenatingTexts
+        // LayoutBuilder-Ansatz kollidiert.
+        title: const Text('Track löschen?'),
+        content: Text(
           '"${track.name}" wird endgültig gelöscht.',
         ),
         actions: [
+          // Bewusst normale Text-Widgets statt AutoHyphenatingText - siehe
+          // ausführliche Begründung beim "Beenden"-Dialog weiter oben
+          // (OverflowBar/intrinsische Breitenberechnung in AlertDialog.actions).
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: AutoHyphenatingText('Abbrechen'),
+            child: const Text('Abbrechen'),
           ),
           FilledButton(
             onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: AutoHyphenatingText('Löschen'),
+            child: const Text('Löschen'),
           ),
         ],
       ),
@@ -279,6 +325,11 @@ class _TrackPageState extends State<TrackPage> {
 
     await _storageService.delete(track.id);
     await _loadSavedTracks();
+    // Aktualisiert die BEREITS GEÖFFNETE Bottom Sheet sofort, damit der
+    // gelöschte Track dort unmittelbar verschwindet (siehe
+    // _showSavedTracksSheet) - das normale setState in _loadSavedTracks
+    // allein reicht dafür nicht aus.
+    if (sheetContext.mounted) setModalState(() {});
   }
 
   /// Exportiert einen gespeicherten Track als GPX-Datei über den nativen
@@ -514,24 +565,48 @@ class _TrackPageState extends State<TrackPage> {
   Widget _buildStatsCard(BuildContext context, RecordingState state) {
     final distanceMeters = widget.recordingService.distanceMeters;
     final duration = widget.recordingService.elapsed;
+    // true, solange die aktuelle Pause automatisch durch erkannten
+    // Stillstand ausgelöst wurde (statt durch den "Pause"-Button) - siehe
+    // TrackRecordingService.
+    final autoPaused = widget.recordingService.isAutoPaused;
 
     return Card(
       elevation: 4,
       color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.92),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _buildStat(context, 'Dauer', TrackFormatter.formatDuration(duration)),
-            _buildStat(context, 'Distanz', TrackFormatter.formatDistance(distanceMeters)),
-            _buildStat(
-              context,
-              'Ø-Tempo',
-              TrackFormatter.formatAverageSpeed(distanceMeters, duration),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                _buildStat(context, 'Dauer', TrackFormatter.formatDuration(duration)),
+                _buildStat(context, 'Distanz', TrackFormatter.formatDistance(distanceMeters)),
+                _buildStat(
+                  context,
+                  'Ø-Tempo',
+                  TrackFormatter.formatAverageSpeed(distanceMeters, duration),
+                ),
+                if (state == RecordingState.paused)
+                  Icon(
+                    autoPaused ? Icons.pause_circle_outline : Icons.pause_circle,
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
+              ],
             ),
-            if (state == RecordingState.paused)
-              Icon(Icons.pause_circle, color: Theme.of(context).colorScheme.primary),
+            // Nur bei automatischer (nicht bei manueller) Pause sichtbar -
+            // erklärt dem Nutzer, warum die Aufzeichnung gerade pausiert,
+            // ohne dass er selbst "Pause" angetippt hat.
+            if (autoPaused) ...[
+              const SizedBox(height: 8),
+              AutoHyphenatingText(
+                'Stillstand erkannt - Aufzeichnung automatisch pausiert',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      fontStyle: FontStyle.italic,
+                    ),
+              ),
+            ],
           ],
         ),
       ),
@@ -596,8 +671,30 @@ class _TrackPageState extends State<TrackPage> {
           ],
         );
       case RecordingState.paused:
+        // WICHTIG: "Pause" und "Fortsetzen" sind funktional unabhängige
+        // Aktionen (siehe TrackRecordingService.pause/resume) - deshalb
+        // wird der "Pause"-Button bei einer AUTOMATISCHEN Pause
+        // zusätzlich (nicht ersetzend) zu "Fortsetzen" angezeigt: Ein Tap
+        // darauf "fixiert" die laufende Pause als manuell (verhindert,
+        // dass sie bei der nächsten kurzen Bewegung - z. B. beim
+        // Griff zum Handy - ungewollt automatisch wieder aufgehoben
+        // wird), OHNE die Aufzeichnung fortzusetzen. Bei einer bereits
+        // manuellen Pause wäre ein zusätzlicher "Pause"-Tap dagegen
+        // wirkungslos (siehe TrackRecordingService.pause) und wird
+        // deshalb hier gar nicht erst angeboten.
+        final autoPaused = widget.recordingService.isAutoPaused;
         return Row(
           children: [
+            if (autoPaused) ...[
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: _handlePause,
+                  icon: const Icon(Icons.pause),
+                  label: AutoHyphenatingText('Pause'),
+                ),
+              ),
+              const SizedBox(width: 12),
+            ],
             Expanded(
               child: OutlinedButton.icon(
                 onPressed: _handleResume,
@@ -618,41 +715,63 @@ class _TrackPageState extends State<TrackPage> {
     }
   }
 
+  /// Öffnet die Liste gespeicherter Tracks als Bottom Sheet.
+  ///
+  /// WICHTIG: `showModalBottomSheet` fügt seinen Inhalt als EIGENE Route
+  /// in den Navigator ein - das ist NICHT Teil des von `build()`
+  /// zurückgegebenen Widget-Baums dieser Seite. Ein `setState()` auf
+  /// `_TrackPageState` (z. B. in [_loadSavedTracks]) aktualisiert daher
+  /// zwar `_savedTracks`, löst aber KEINEN Rebuild des bereits
+  /// GEÖFFNETEN Sheets aus - das würde die Liste erst beim nächsten
+  /// Öffnen/Schließen aktualisieren. Der `StatefulBuilder` hier stellt
+  /// mit `setModalState` einen eigenen, lokal für dieses Sheet gültigen
+  /// Rebuild-Mechanismus bereit, den [_handleDelete] nach dem Löschen
+  /// zusätzlich zum normalen `setState` aufruft (siehe dort).
   void _showSavedTracksSheet(BuildContext context) {
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       builder: (sheetContext) {
-        return DraggableScrollableSheet(
-          initialChildSize: 0.6,
-          minChildSize: 0.3,
-          maxChildSize: 0.9,
-          expand: false,
-          builder: (context, scrollController) {
-            return Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return DraggableScrollableSheet(
+              initialChildSize: 0.6,
+              minChildSize: 0.3,
+              maxChildSize: 0.9,
+              expand: false,
+              builder: (context, scrollController) {
+                return Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Expanded(
-                        child: AutoHyphenatingText(
-                          'Gespeicherte Tracks',
-                          style: Theme.of(context).textTheme.titleLarge,
-                        ),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: AutoHyphenatingText(
+                              'Gespeicherte Tracks',
+                              style: Theme.of(context).textTheme.titleLarge,
+                            ),
+                          ),
+                          IconButton(
+                            tooltip: 'Track importieren (GPX)',
+                            icon: const Icon(Icons.file_download_outlined),
+                            onPressed: _handleImport,
+                          ),
+                        ],
                       ),
-                      IconButton(
-                        tooltip: 'Track importieren (GPX)',
-                        icon: const Icon(Icons.file_upload_outlined),
-                        onPressed: _handleImport,
+                      const SizedBox(height: 12),
+                      Expanded(
+                        child: _buildSavedTracksList(
+                          context,
+                          scrollController,
+                          setModalState,
+                        ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 12),
-                  Expanded(child: _buildSavedTracksList(context, scrollController)),
-                ],
-              ),
+                );
+              },
             );
           },
         );
@@ -660,7 +779,11 @@ class _TrackPageState extends State<TrackPage> {
     );
   }
 
-  Widget _buildSavedTracksList(BuildContext context, ScrollController scrollController) {
+  Widget _buildSavedTracksList(
+    BuildContext context,
+    ScrollController scrollController,
+    StateSetter setModalState,
+  ) {
     if (_loadingSavedTracks) {
       return const Center(child: CircularProgressIndicator());
     }
@@ -696,7 +819,7 @@ class _TrackPageState extends State<TrackPage> {
               IconButton(
                 tooltip: 'Löschen',
                 icon: const Icon(Icons.delete_outline),
-                onPressed: () => _handleDelete(track),
+                onPressed: () => _handleDelete(track, context, setModalState),
               ),
             ],
           ),

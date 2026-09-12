@@ -40,10 +40,33 @@ class _InfoPageState extends State<InfoPage> {
         child: ListView(
           padding: const EdgeInsets.all(24),
           children: [
-            Icon(
-              Icons.explore,
-              size: 72,
-              color: Theme.of(context).colorScheme.primary,
+            // Zeigt das tatsächliche App-Icon (dieselbe Bilddatei, aus der
+            // auch das Launcher-Icon erzeugt wird, siehe README Abschnitt
+            // 14) statt eines generischen Material-Icons - dafür muss
+            // assets/icon/icon.png in pubspec.yaml unter flutter/assets
+            // eingetragen sein UND die App nach der pubspec-Änderung
+            // vollständig neu gestartet werden (ein reines Hot Reload
+            // bindet neu deklarierte Assets nicht ein - Hot Restart oder
+            // kompletter Neustart ist hier nötig).
+            //
+            // WICHTIG (Absturzschutz): errorBuilder fängt den Fall ab,
+            // dass die Asset-Datei zur Laufzeit trotzdem nicht gefunden
+            // wird (z. B. abweichender Dateiname/Pfad im jeweiligen
+            // Projekt oder eine pubspec-Änderung ohne vorherigen
+            // Neustart) - statt einer abstürzenden Exception erscheint
+            // dann einfach das bisherige, generische Icon als Fallback.
+            ClipRRect(
+              borderRadius: BorderRadius.circular(20),
+              child: Image.asset(
+                'assets/icon/icon.png',
+                width: 96,
+                height: 96,
+                errorBuilder: (context, error, stackTrace) => Icon(
+                  Icons.explore,
+                  size: 96,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
+              ),
             ),
             const SizedBox(height: 16),
             AutoHyphenatingText(

@@ -95,18 +95,30 @@ class _TrackDetailPageState extends State<TrackDetailPage> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: AutoHyphenatingText('Track löschen?'),
-        content: AutoHyphenatingText(
+        // title/content bewusst als normale Text-Widgets statt
+        // AutoHyphenatingText - siehe ausführliche Begründung in
+        // track_page.dart (_handleStop): Flutters interne
+        // Dialog-Layout-Mechanik führt an mehreren Stellen intrinsische
+        // Breitenberechnungen durch (nicht nur bei den actions über
+        // OverflowBar, auch title/content selbst sind betroffen), mit
+        // denen AutoHyphenatingTexts LayoutBuilder-Ansatz kollidiert.
+        title: const Text('Track löschen?'),
+        content: Text(
           '"${widget.track.name}" wird endgültig gelöscht.',
         ),
         actions: [
+          // Bewusst normale Text-Widgets statt AutoHyphenatingText - siehe
+          // ausführliche Begründung in track_page.dart (_handleStop):
+          // AlertDialog.actions wird über ein OverflowBar layoutet, das
+          // intrinsische Breitenberechnungen benötigt, die
+          // AutoHyphenatingText (LayoutBuilder-basiert) nicht unterstützt.
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: AutoHyphenatingText('Abbrechen'),
+            child: const Text('Abbrechen'),
           ),
           FilledButton(
             onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: AutoHyphenatingText('Löschen'),
+            child: const Text('Löschen'),
           ),
         ],
       ),

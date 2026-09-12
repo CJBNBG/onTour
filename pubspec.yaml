@@ -1,7 +1,7 @@
 name: ontour
 description: Kompass-, Tacho- und Karten-App für Android
 publish_to: 'none'
-version: 1.0.0+6
+version: 1.0.0+12
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
@@ -54,7 +54,7 @@ dependencies:
 
   # Datei-Auswahl-Dialog zum Importieren einer GPX-Datei (siehe
   # services/track_import_export_service.dart, README Abschnitt 20)
-  file_picker: ^12.2.0
+  file_picker: ^12.3.0
 
 dev_dependencies:
   flutter_test:
@@ -68,6 +68,12 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  # Nötig, damit die Info-Seite das App-Icon zur Laufzeit per
+  # Image.asset(...) anzeigen kann (siehe ui/info_page.dart) - die Datei
+  # selbst lag zwar schon für flutter_launcher_icons bereit, war bisher
+  # aber nicht als regulärer App-Asset eingetragen.
+  assets:
+    - assets/icon/icon.png
 
 # Konfiguration für `dart run flutter_launcher_icons` (siehe README,
 # Abschnitt "App-Icon"). image_path liefert das Vollbild-Icon,

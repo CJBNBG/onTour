@@ -52,12 +52,49 @@ Innerhalb von `<manifest>`, aber außerhalb von `<application>`, ergänzen:
 <uses-permission android:name="android.permission.INTERNET"/>
 <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
 <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
+<uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+<uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION"/>
+<uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+<uses-permission android:name="android.permission.WAKE_LOCK"/>
 ```
 
 `INTERNET` wird für das Laden der Kartenkacheln (OpenStreetMap/OpenSeaMap)
 benötigt, die beiden Standort-Berechtigungen für Tacho, Track und die
 Satellitenanzahl. Für den Beschleunigungssensor (Stillstandserkennung,
 Abschnitt 6) ist unter Android KEINE gesonderte Berechtigung nötig.
+
+**NEU - für die Hintergrund-Aufzeichnung von Tracks (siehe Abschnitt
+19):** `FOREGROUND_SERVICE` wird seit Android 9 für jeden
+Foreground-Service benötigt, `FOREGROUND_SERVICE_LOCATION` zusätzlich ab
+Android 14 (API 34) speziell für einen Foreground-Service vom Typ
+"location" - `geolocator` startet einen solchen automatisch, sobald ein
+`ForegroundNotificationConfig` übergeben wird (siehe
+`TrackRecordingService._startListening`). `POST_NOTIFICATIONS` wird ab
+Android 13 (API 33) für JEDE Benachrichtigung benötigt, also auch für
+die dauerhafte Hinweis-Benachrichtigung während einer laufenden
+Track-Aufzeichnung - ohne diese Berechtigung würde die Benachrichtigung
+auf neueren Geräten stillschweigend nicht angezeigt (die Aufzeichnung
+selbst läuft davon unabhängig trotzdem weiter, der Nutzer sieht davon
+aber ohne die Benachrichtigung nichts).
+
+**Fehlerkorrektur - `WAKE_LOCK` fehlte:** Die Foreground-Service-
+Konfiguration setzt `enableWakeLock: true` (hält die CPU während der
+Hintergrund-Aufzeichnung wach, siehe `TrackRecordingService`) - dafür
+ist zwingend `android.permission.WAKE_LOCK` nötig. Fehlt sie, wirft
+`geolocator` beim Start der Aufzeichnung eine `SecurityException`
+("Neither user ... nor current process has android.permission.WAKE_LOCK"),
+sichtbar im Log als `PlatformException` auf dem
+`geolocator_updates_android`-EventChannel. `WAKE_LOCK` ist eine normale
+("nicht gefährliche") Berechtigung - sie wird automatisch bei der
+Installation gewährt, es ist KEINE Laufzeit-Abfrage nötig.
+
+**Falls du die App im Google Play Store veröffentlichst:** Für
+Foreground-Service-Berechtigungen des Typs "location" verlangt die Play
+Console (seit Android 14) eine zusätzliche Begründung/Erklärung in der
+App-Übersicht (Bereich "App-Inhalt" → "Berechtigungen für
+App-Zugriffsanfragen" bzw. "Foreground-Service-Berechtigungen") - das
+ist unabhängig vom eigentlichen Code und muss einmalig in der Play
+Console selbst ausgefüllt werden.
 
 `minSdkVersion` sollte auf mindestens 21 stehen (Standard bei aktuellen
 Flutter-Projekten bereits der Fall).
@@ -163,6 +200,16 @@ vom eigentlichen Geschwindigkeitswert unabhängiges Flackern des Layouts.
 
 Auf Geräten ohne Beschleunigungssensor (selten) verhält sich die App
 einfach wie zuvor - ausschließlich auf Basis der GPS-Rohdaten.
+
+**Zweite Verwendung: automatische Pause der Track-Aufzeichnung.** Seit
+einer späteren Erweiterung nutzt auch `TrackRecordingService` denselben
+`MotionService` (siehe README Abschnitt 19) - hier aber nicht zur
+Korrektur einer Anzeige, sondern um eine laufende Aufzeichnung
+automatisch zu pausieren, solange Stillstand erkannt wird (z. B. an
+einer Ampel), und automatisch fortzusetzen, sobald wieder Bewegung
+erkannt wird. Eine manuell über den "Pause"-Button ausgelöste Pause wird
+davon bewusst NICHT berührt - nur eine automatische Pause hebt sich bei
+Bewegung von selbst wieder auf.
 
 ## 7. Bildschirm-Wachhalten (Wakelock)
 
@@ -290,9 +337,37 @@ vereinzelt knapp negative Werte beobachtet (z. B. -0,4° statt 359,6°,
 typisches Sensorrauschen nahe der 0°/360°-Grenze) - die Normalisierung
 schließt das unabhängig vom konkreten Gerät zuverlässig aus.
 
+**Kursanzeige mit Label:** Der Gradangabe ist ein Label "Kurs: "
+vorangestellt (z. B. "Kurs: 87°") - bewusst als Teil desselben
+Text-Widgets, damit Label und Wert garantiert in derselben Schrift/-größe
+erscheinen (`textTheme.displaySmall`).
+
+**Genauigkeitsangaben in eigenen, größeren Text-Widgets:** Die
+Genauigkeit von Kurs, Höhe UND (neu) Position stehen jeweils in einem
+EIGENEN `AutoHyphenatingText`-Widget direkt unter dem zugehörigen
+Hauptwert - NICHT im selben Text enthalten. Die Schriftgröße wird dafür
+programmatisch berechnet (`_accuracyStyle`): ursprünglich ein Drittel
+der `displaySmall`-Größe, auf Wunsch für bessere Lesbarkeit inzwischen
+auf zwei Drittel (= etwa doppelt so groß wie zuvor) angehoben - die
+Genauigkeit bleibt damit weiterhin klar kleiner als der Hauptwert, aber
+deutlich besser lesbar als vorher.
+
+**Genauigkeit der Position (neu):** Unterhalb von Breite/Länge zeigt die
+Kompass-Seite jetzt zusätzlich die horizontale Positionsgenauigkeit an
+(z. B. "Genauigkeit: ± 8 m") - bewusst nur EINE gemeinsame Zeile für
+Breite UND Länge (nicht getrennt), da ein GPS-Fix nur eine gemeinsame
+horizontale Genauigkeit liefert. Dafür wurde `AltitudeReading` um
+`positionAccuracyMeters` erweitert (aus `Position.accuracy`, analog zu
+`latitude`/`longitude` - siehe Abschnitt zur Positionsanzeige weiter
+unten) und `BarometerAltitudeService.calibrate()` reicht auch diesen
+Wert als zusätzlichen, optionalen Parameter durch.
+
 **Höhenanzeige:** Unterhalb der Peilungsgenauigkeit zeigt die
-Kompass-Seite zusätzlich die aktuelle Höhe inkl. Genauigkeit und Quelle
-an. Zwei kombinierte Quellen:
+Kompass-Seite zusätzlich die aktuelle Höhe inkl. Quelle an - in derselben
+Schriftgröße wie die Kursangabe (`displaySmall`) und als Meter über
+Normal-Null angegeben ("... m ü. NN", z. B. "Höhe: 512 m ü. NN"; die
+zugehörige Genauigkeit z. B. "Genauigkeit: ± 8 m (GPS)" erscheint separat
+darunter, siehe oben). Zwei kombinierte Quellen:
 
 - **GPS** (`services/altitude_service.dart`, `Position.altitude`/
   `altitudeAccuracy`) - liefert die absolute, aber eher grobe Höhe
@@ -311,9 +386,10 @@ an. Zwei kombinierte Quellen:
   und Nutzen.
 
 Sobald ein Barometer verfügbar ist, übernimmt die Anzeige automatisch
-dessen präzisere Werte (z. B. "Höhe: 512,3 m (± 0,3 m, Barometer)"),
-andernfalls bleibt es bei der GPS-Höhe (z. B.
-"Höhe: 512 m (± 8 m, GPS)"). Weitere Design-Entscheidungen:
+dessen präzisere Werte (z. B. "Höhe: 512,3 m ü. NN", Genauigkeit
+separat darunter: "Genauigkeit: ± 0,3 m (Barometer)"), andernfalls
+bleibt es bei der GPS-Höhe (z. B. "Höhe: 512 m ü. NN" /
+"Genauigkeit: ± 8 m (GPS)"). Weitere Design-Entscheidungen:
 - Ein eigener, schlanker Standort-Stream statt Wiederverwendung des
   Tacho-`SpeedService` - die Höhe muss nicht so oft aktualisiert werden
   wie die Geschwindigkeit, und beide Seiten sollen unabhängig
@@ -328,6 +404,61 @@ andernfalls bleibt es bei der GPS-Höhe (z. B.
   Karte (siehe Abschnitt 2), der Barometer-Zugriff benötigt unter
   Android keine gesonderte Laufzeit-Berechtigung.
 
+**Positionsanzeige (Breite/Länge, DMS-Format):** Unterhalb der Höhe
+zeigt die Kompass-Seite zusätzlich die aktuelle Position an - Breiten-
+und Längengrad JEWEILS in einer eigenen Zeile, in derselben Schriftgröße
+wie die Kursangabe (`displaySmall`), z. B. "Breite: 52° 37' 12,3" N"
+bzw. "Länge: 9° 13' 45,6" O". Formatiert wird über den neuen
+`util/coordinate_formatter.dart` (`CoordinateFormatter`), der
+Dezimalgrad in das im Outdoor-/Nautikbereich gebräuchlichere DMS-Format
+(Grad/Minuten/Sekunden) umrechnet - passend zur nautischen Zielgruppe
+der App (siehe Projektbeschreibung). "O" statt "E" für Ost, entsprechend
+der deutschsprachigen Ausrichtung der App.
+
+Die Position stammt bewusst aus DERSELBEN GPS-Messung wie die Höhe
+(`AltitudeReading` wurde dafür um `latitude`/`longitude` erweitert,
+siehe `models/altitude_reading.dart`) statt über einen weiteren, eigenen
+Standort-Stream - das spart zusätzlichen GPS-/Akkuverbrauch. Auch die
+vom Barometer gelieferten `AltitudeReading`s führen dafür jetzt die
+zuletzt bekannte Position mit (`BarometerAltitudeService.calibrate()`
+nimmt Breite/Länge inzwischen als zusätzliche Parameter entgegen), damit
+die Positionsanzeige unabhängig davon funktioniert, ob gerade die
+GPS- oder die Barometer-Höhe angezeigt wird. Fehlt die
+Standort-Berechtigung bzw. liegt noch kein Wert vor, erscheint
+konsequent "Breite: nicht verfügbar" bzw. "Länge: nicht verfügbar" -
+analog zur Höhenanzeige. Direkt darunter steht (neu) eine gemeinsame
+Genauigkeitszeile für die Position (`Position.accuracy`, als
+`positionAccuracyMeters` ebenfalls über `AltitudeReading`
+durchgereicht) - siehe "Genauigkeit der Position" weiter oben.
+
+**Seitenlayout (Kompassrose oben, Textblock unten, freier Bereich
+dazwischen, größenadaptiv):** Kompassrose und Textblock (Kurs, Höhe,
+Position) sitzen in einem `Stack` an festen Positionen - die
+Kompassrose oben (`Align(alignment: Alignment.topCenter)`), der
+komplette Textblock unten (`Align(alignment: Alignment.bottomCenter)`,
+direkt oberhalb der unteren Navigationsleiste aus `HomeShell`). Damit
+beide Blöcke auf JEDER Bildschirmgröße UND bei JEDER Systemschriftgröße
+garantiert nicht überlappen (das war mit rein festen Größen/Schriften
+nicht zuverlässig der Fall - insbesondere Samsung-Geräte haben oft eine
+größere Standard-Systemschrift), wird der verfügbare Platz jetzt per
+`LayoutBuilder` zur Laufzeit gemessen:
+
+- Die Kompassrose bekommt eine berechnete Kantenlänge - orientiert an
+  der verfügbaren Breite, aber auf max. ca. 42 % der verfügbaren Höhe
+  begrenzt (`120`-`280` logische Pixel), damit für den Textblock in
+  jedem Fall genug Platz übrig bleibt.
+- Der komplette Textblock wird über `FittedBox(fit: BoxFit.scaleDown)`
+  in den verbleibenden Platz eingepasst - ist genug Platz vorhanden,
+  bleibt die reguläre `displaySmall`-Schriftgröße erhalten; nur bei
+  Platzmangel (großer Systemschrift, kleiner Bildschirm) wird der GESAMTE
+  Block gleichmäßig verkleinert, wodurch das Größenverhältnis zwischen
+  Hauptwerten und den ein Drittel so großen Genauigkeitsangaben
+  (`_accuracyStyle`) erhalten bleibt.
+
+Der Textblock selbst ist dafür in eine eigene Methode
+(`_buildTextBlock`) ausgelagert, damit `build()` ihn unverändert per
+`FittedBox` skalieren kann.
+
 
 ## 11. Tacho-Seite: Sieben-Segment-Anzeige & Einheiten-Auswahl
 
@@ -340,6 +471,21 @@ andernfalls bleibt es bei der GPS-Höhe (z. B.
   und ein Komma als Dezimaltrennzeichen. Die Einheit steht unterhalb
   statt neben der Zahl, damit die Anzeige selbst die volle verfügbare
   Breite nutzen kann.
+- **Nachkommastellen-Darstellung (aktualisiert):** `SpeedFormatter`
+  formatiert jetzt IMMER mit genau einer Nachkommastelle (frühere Regel
+  "unterhalb von 10 km/h eine Nachkommastelle, sonst keine" wurde
+  aufgegeben). `SpeedPage._buildSpeedNumber` trennt diese eine
+  Nachkommastelle vom Vorkommateil ab und zeigt sie deutlich kleiner
+  (ca. ein Drittel der Höhe) und hochgestellt direkt hinter der Zahl an
+  (zwei nebeneinander gesetzte `SevenSegmentDisplay`-Instanzen
+  unterschiedlicher Höhe in einer `Row` mit `crossAxisAlignment.start`).
+- **Info-Zeilen besser lesbar (aktualisiert):** Die drei Zeilen unterhalb
+  der Einheiten-Angabe (Geschwindigkeits-Genauigkeit, Satellitenanzahl,
+  Stillstands-/Messungs-Status) nutzen jetzt `_readableInfoStyle` -
+  programmatisch auf das Doppelte der ursprünglichen `bodySmall`-Größe
+  berechnet, statt der vorherigen, recht kleinen Standardgröße. Das war
+  bislang während der Fahrt (Blick nur kurz auf das Display) schwer
+  lesbar.
 - **Einheiten-Auswahl**: `SegmentedButton` mit Icons Person (m/s, zu Fuß),
   Auto (km/h), Segelboot (kn) - im selben Stil wie die
   Anzeigemodus-Auswahl in den Einstellungen. Beide `SegmentedButton`s
@@ -363,6 +509,19 @@ Zwecke gleichzeitig:
 - **Info-Button auf jeder Seite:** Ein Antippen des Info-Icons (oben
   rechts, auf allen vier Hauptseiten identisch erreichbar) öffnet die
   neue `ui/info_page.dart` mit:
+  - Das tatsächliche App-Icon (`assets/icon/icon.png`, dieselbe Datei,
+    aus der auch das Launcher-Icon erzeugt wird, siehe Abschnitt 14)
+    statt eines generischen Material-Icons - dafür ist die Datei jetzt
+    zusätzlich unter `flutter/assets` in `pubspec.yaml` eingetragen
+    (zuvor nur für `flutter_launcher_icons` konfiguriert, nicht als
+    regulärer App-Asset nutzbar). **Wichtig:** Nach dieser
+    pubspec-Änderung reicht ein reines Hot Reload nicht aus - neu
+    deklarierte Assets werden erst nach einem Hot Restart bzw.
+    kompletten Neustart der App eingebunden. Falls die Datei zur
+    Laufzeit trotzdem nicht gefunden werden kann (z. B. abweichender
+    Dateiname/-pfad), fängt ein `errorBuilder` das ab und zeigt
+    ersatzweise wieder das bisherige, generische Icon - so führt ein
+    fehlendes Asset nicht zu einem Absturz der Info-Seite.
   - Name und Version der App - über `package_info_plus` zur Laufzeit
     direkt aus dem tatsächlichen Build ausgelesen (nicht fest im Code
     hinterlegt), bleibt dadurch auch nach künftigen
@@ -379,7 +538,7 @@ Alle Fließtext-Ausgaben nutzen `AutoHyphenatingText` (Paket
 `auto_hyphenating_text`) statt des Standard-`Text`-Widgets - ein direkter
 Ersatz mit identischer Konstruktor-Signatur. Initialisiert wird die
 deutsche Trennung (Reform 1996) einmalig beim App-Start in `main.dart`
-(`initHyphenation(DefaultResourceLoaderLanguage.de1996)`). Zwei bewusste
+(`initHyphenation(DefaultResourceLoaderLanguage.de1996)`). VIER bewusste
 Ausnahmen:
 - Die Himmelsrichtungs-Buchstaben (N/O/S/W) im Kompass werden direkt auf
   die Canvas gezeichnet (`TextPainter`/`TextSpan`), nicht über ein
@@ -401,6 +560,32 @@ Ausnahmen:
   Laufzeitfehler beim Öffnen der jeweiligen Seite. Bei den hier stets
   kurzen Wörtern (m/s, km/h, kn, System, Hell, Dunkel) wäre eine
   Silbentrennung ohnehin nie nötig gewesen.
+- **NEU (Fehlerkorrektur):** `title`, `content` UND die `TextButton`-/
+  `FilledButton`-Aktionen in ALLEN DREI `AlertDialog`s des Projekts
+  (Track beenden in `track_page.dart`, Track löschen in `track_page.dart`
+  UND `track_detail_page.dart`) verwenden aus demselben Grund wie beim
+  `SegmentedButton` durchgängig normales `Text` statt
+  `AutoHyphenatingText`. Flutters interne Dialog-Layout-Mechanik führt an
+  MEHREREN Stellen intrinsische Breitenberechnungen durch, die mit
+  `AutoHyphenatingText`s `LayoutBuilder`-Ansatz kollidieren:
+  - Die `actions` werden über ein `OverflowBar` angeordnet, das bei zu
+    wenig Platz (z. B. drei Buttons, einer mit dem längeren Text "Weiter
+    aufzeichnen") die intrinsische Breite jedes Buttons berechnet, um zu
+    entscheiden, ob umgebrochen werden muss.
+  - Bei `scrollable: true` (siehe "Aufzeichnung beenden"-Dialog) packt
+    Flutter zusätzlich `title` UND `content` GEMEINSAM in einen
+    scrollbaren Bereich, der ebenfalls Teil derselben intrinsischen
+    Breitenberechnung ist wie die Aktionsleiste.
+
+  Eine erste, unvollständige Korrektur (nur die `actions`) behob den
+  Laufzeitfehler ("LayoutBuilder does not support returning intrinsic
+  dimensions" bzw. "RenderBox was not laid out") deshalb noch NICHT
+  zuverlässig - erst nachdem auch `title` konsequent auf `Text`
+  umgestellt wurde, verschwand der Fehler vollständig. Bei so kurzen
+  Dialog-Texten wäre eine Silbentrennung ohnehin nie nötig gewesen -
+  generelle Regel seither: **In `AlertDialog`s grundsätzlich kein
+  `AutoHyphenatingText` verwenden, weder für `title`, `content` noch
+  `actions`.**
 
 ## 13a. Locale-Initialisierung für Datumsformatierung (`DateFormat`)
 
@@ -568,6 +753,8 @@ lib/
     speed_formatter.dart   Formatierung inkl. Nachkommastellen-Regel
     track_formatter.dart   Formatierung von Distanz/Dauer/Datum eines Tracks (Abschnitt 19)
     gpx_converter.dart     Reine GPX ⇄ RecordedTrack-Umwandlung (Abschnitt 20)
+    coordinate_formatter.dart  Formatierung von Breite/Länge im DMS-Format
+                                (Abschnitt 10, Kompass-Seite)
   main.dart
 native_android/
   de/clausjbauer/ontour/MainActivity.kt   Siehe Abschnitt 3
@@ -718,6 +905,19 @@ gefährden.
   Tacho-/Kompass-Seite, siehe Abschnitt 7) - während einer Pause darf er
   wie gewohnt automatisch sperren.
 
+**Fehlerkorrektur - Liste aktualisiert sich nach dem Löschen sofort:**
+Die Liste gespeicherter Tracks wird über `showModalBottomSheet` als
+eigene, vom übrigen Widget-Baum der Seite losgelöste Route dargestellt -
+ein normales `setState` auf `_TrackPageState` (wie es `_loadSavedTracks`
+nach dem Löschen aufruft) baut deshalb NICHT automatisch das bereits
+geöffnete Sheet neu auf; der gelöschte Track blieb dort fälschlich
+sichtbar, bis das Sheet geschlossen und erneut geöffnet wurde. Ein
+`StatefulBuilder` um den Sheet-Inhalt stellt jetzt einen eigenen,
+lokalen Rebuild-Callback (`setModalState`) bereit, den `_handleDelete`
+zusätzlich zum normalen `setState` aufruft - der Import-Button ist davon
+nicht betroffen, da er das Sheet ohnehin sofort schließt, bevor der
+eigentliche Import beginnt (siehe unten).
+
 **Detailansicht (`ui/track_detail_page.dart`):** Ersetzt die frühere,
 eigenständige "Karte"-Seite (siehe Abschnitt 9) und zeigt einen einzelnen
 gespeicherten Track vollständig an:
@@ -734,14 +934,74 @@ gespeicherten Track vollständig an:
   schließt sich danach automatisch und signalisiert `TrackPage` per
   Rückgabewert, die Liste gespeicherter Tracks neu zu laden.
 
-**Bekannte Einschränkung:** Wird die App vollständig in den Hintergrund
-gelegt (nicht nur ein anderer Tab innerhalb der App), kann das
-Betriebssystem die GPS-Aktualisierungsrate reduzieren oder den Prozess
-irgendwann beenden - eine zuverlässige Aufzeichnung über Stunden hinweg
-bei komplett gesperrtem Bildschirm würde einen Foreground-Service
-erfordern, der bewusst nicht Teil dieser Umsetzung ist (ähnlich wie das
-vorausschauende Kartenherunterladen in Abschnitt 8 wäre das eine deutlich
-größere Ausbaustufe).
+**Zusammenspiel von manueller und automatischer Pause (Fehlerkorrektur):**
+Ein manuelles Antippen von "Pause" wirkt jetzt auch dann, wenn die
+Aufzeichnung bereits AUTOMATISCH pausiert ist (z. B. weil man während
+einer automatischen Stillstands-Pause an einer Ampel zusätzlich selbst
+auf "Pause" tippt, etwa um eine längere Rast einzulegen) -
+`TrackRecordingService.pause()` markiert die laufende Pause in diesem
+Fall nachträglich als manuell, statt (wie in einer früheren Version)
+wirkungslos zu bleiben. Ohne diese Korrektur blieb eine solche Pause
+intern fälschlich als "automatisch" eingestuft, wodurch ein bloßes
+In-die-Hand-Nehmen des Telefons (vom Bewegungssensor bereits als
+Bewegung gewertet) sie ungewollt sofort wieder automatisch aufhob, noch
+bevor der "Fortsetzen"-Button überhaupt angetippt werden konnte - ein
+spürbar "hakeliges" Verhalten.
+
+Zusätzlich sorgt eine kurze **Schonfrist von 10 Sekunden** nach einem
+MANUELLEN Antippen von "Fortsetzen" (`TrackRecordingService.resume`,
+Parameter `manual`) dafür, dass die automatische Stillstandserkennung in
+diesem Zeitfenster ausgesetzt ist - andernfalls hätte die automatische
+Pause sofort wieder zugeschlagen, wenn das Fahrzeug im Moment des
+Antippens noch nicht tatsächlich losgefahren war. Ein automatisches
+Fortsetzen (durch erkannte Bewegung nach einer automatischen Pause,
+siehe oben) setzt diese Schonfrist bewusst NICHT - sie gilt
+ausschließlich für den expliziten Tap auf den Button.
+
+**Bedienelemente bei automatischer Pause (aktualisiert):** "Pause" und
+"Fortsetzen" sind funktional unabhängige Aktionen (siehe oben) - deshalb
+zeigt `TrackPage._buildControls` während einer AUTOMATISCHEN Pause jetzt
+BEIDE Buttons gleichzeitig an ("Pause", "Fortsetzen" UND "Beenden", drei
+statt zwei Buttons in der Reihe): Ein Tap auf "Pause" fixiert die
+laufende Pause als manuell (siehe oben), OHNE die Aufzeichnung
+fortzusetzen - nützlich, um eine automatische Pause bewusst zu
+"bestätigen", bevor sie durch eine kurze Bewegung (z. B. beim
+In-die-Hand-Nehmen des Telefons) ungewollt automatisch wieder aufgehoben
+wird. Bei einer bereits MANUELLEN Pause wäre ein zusätzlicher
+"Pause"-Tap dagegen wirkungslos (siehe `TrackRecordingService.pause`)
+und wird deshalb dort weiterhin nicht angeboten - nur "Fortsetzen" und
+"Beenden" wie bisher.
+
+**Aufzeichnung im Hintergrund (Foreground-Service):** Wird onTour
+während einer laufenden Aufzeichnung in den Hintergrund gelegt (nicht
+nur ein anderer Tab innerhalb der App, sondern z. B. weil kurz Google
+Maps zur Navigation geöffnet wird), bricht die Aufzeichnung NICHT ab.
+`TrackRecordingService._startListening` konfiguriert den GPS-Stream
+dafür über `AndroidSettings`/`ForegroundNotificationConfig` (Paket
+`geolocator`) als nativen Android-Foreground-Service mit einer
+dauerhaften, nicht wegwischbaren Benachrichtigung ("onTour zeichnet
+auf ...") - das signalisiert dem Betriebssystem, dass die App aktiv
+weiterarbeiten soll, und verhindert zuverlässig, dass Android die
+GPS-Aktualisierungsrate drosselt oder den Prozess beendet. Die
+zugehörigen Berechtigungen sind in Abschnitt 2 beschrieben.
+
+Der Foreground-Service läuft dabei exakt so lange wie der GPS-Stream
+selbst - also NUR während `RecordingState.recording`. Bei einer Pause
+(egal ob manuell über den Button oder automatisch bei erkanntem
+Stillstand, siehe oben) wird der Stream wie gehabt beendet, wodurch
+auch der Foreground-Service und damit die Benachrichtigung
+verschwinden - das spart während einer Pause weiterhin Akku und ist
+bewusst keine Ausnahme für die neue Hintergrundfunktion.
+
+**Hinweis zu herstellerspezifischem Akku-Management:** Trotz
+Foreground-Service können manche Android-Hersteller (insbesondere
+Samsung mit seinem sehr aggressiven Akku-/Ruhezustands-Management)
+Apps im Hintergrund dennoch beenden. Für eine zuverlässige
+Langzeitaufzeichnung empfiehlt es sich, onTour in den
+Geräteeinstellungen manuell von der Akku-Optimierung auszunehmen (z. B.
+unter "Einstellungen → Apps → onTour → Akku → Nicht optimieren" bzw.
+das entsprechende Samsung-Pendant "Nicht überwachte Apps") - das ist
+eine reine Geräteeinstellung außerhalb der App selbst.
 
 ## 20. Track-Import/-Export im GPX-Format
 
