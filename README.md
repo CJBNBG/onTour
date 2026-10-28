@@ -121,9 +121,13 @@ angezeigt (siehe `lib/services/satellite_service.dart`).
 
 ## 4. Genauigkeit/Aktualität der Geschwindigkeitsmessung (Einstellungen)
 
-Auf der Einstellungsseite lässt sich unter "Genauigkeit der
-Geschwindigkeitsmessung" eine von drei Stufen wählen
-(`models/speed_accuracy_mode.dart`, `SpeedAccuracyMode`):
+**Ort (aktualisiert durch Abschnitt 24):** Einstellungen → Erweitert
+(ursprünglich, vor Einführung der Unterreiter, direkt auf der
+alleinigen Einstellungsseite).
+
+Dort lässt sich unter "Genauigkeit der Geschwindigkeitsmessung" eine von
+drei Stufen wählen (`models/speed_accuracy_mode.dart`,
+`SpeedAccuracyMode`):
 
 | Stufe | GPS-Genauigkeit | Mindestabstand für Updates | Effekt |
 |---|---|---|---|
@@ -444,9 +448,10 @@ größere Standard-Systemschrift), wird der verfügbare Platz jetzt per
 `LayoutBuilder` zur Laufzeit gemessen:
 
 - Die Kompassrose bekommt eine berechnete Kantenlänge - orientiert an
-  der verfügbaren Breite, aber auf max. ca. 42 % der verfügbaren Höhe
-  begrenzt (`120`-`280` logische Pixel), damit für den Textblock in
-  jedem Fall genug Platz übrig bleibt.
+  der verfügbaren Breite, aber auf max. ca. 48 % der verfügbaren Höhe
+  begrenzt (`120`-`360` logische Pixel, siehe Abschnitt 28 für eine
+  spätere Anhebung dieser Werte), damit für den Textblock in jedem Fall
+  genug Platz übrig bleibt.
 - Der komplette Textblock wird über `FittedBox(fit: BoxFit.scaleDown)`
   in den verbleibenden Platz eingepasst - ist genug Platz vorhanden,
   bleibt die reguläre `displaySmall`-Schriftgröße erhalten; nur bei
@@ -1083,3 +1088,1635 @@ Android-Intents nötig) - der manuelle Import über den
 Datei-Auswahl-Dialog deckt den Anwendungsfall bereits ab, ohne die
 Android-Konfiguration zusätzlich zu verkomplizieren. Bei Bedarf lässt
 sich das jederzeit ergänzen.
+
+## 21. Aufzeichnung übersteht ein Entfernen der App aus den zuletzt verwendeten Apps
+
+**Problem, das hiermit behoben wird:** Bislang konnte eine laufende
+Track-Aufzeichnung "einfrieren", ohne dass das äußerlich erkennbar war:
+Wischt man onTour während einer Aufzeichnung aus der Liste der zuletzt
+verwendeten Apps ("Recents"), blieb zwar die Benachrichtigung des
+nativen Android-Foreground-Service sichtbar (siehe Abschnitt 19) UND der
+zugrunde liegende GPS-Empfang lief nativ tatsächlich weiter - aber ohne
+die hier beschriebene Änderung zerstört Android beim Entfernen der
+App-Kachel standardmäßig sowohl `MainActivity` als auch die zu ihr
+gehörende `FlutterEngine`. Der GESAMTE Dart-Zustand - insbesondere alle
+bereits gesammelten `TrackPoint`s, die aufsummierte Distanz und die
+Dauer, die ausschließlich im Arbeitsspeicher von
+`TrackRecordingService` liegen (siehe Abschnitt 19) - ging dabei
+verloren. Die Benachrichtigung suggerierte also eine weiterlaufende
+Aufzeichnung, obwohl tatsächlich keine neuen Punkte mehr im Dart-Code
+ankamen und beim nächsten Öffnen der App eine "leere", neu erzeugte
+`TrackRecordingService`-Instanz vorlag.
+
+**Ursache:** Das ist normales, von Flutter selbst so vorgesehenes
+Verhalten für den Standardfall (`FlutterActivity` erzeugt bei jedem
+Start automatisch eine NEUE `FlutterEngine` und zerstört sie beim
+eigenen Beenden wieder mit) - unabhängig davon, ob der zugrunde liegende
+native Android-Service (hier: der geolocator-Foreground-Service) selbst
+über ein Wischen hinaus weiterläuft oder nicht (`android:stopWithTask`
+ist laut offizieller Android-Dokumentation für Services standardmäßig
+bereits `false`, betrifft hier also gar nicht das eigentliche Problem).
+Das Problem liegt ausschließlich auf der Flutter-Engine-/Activity-Ebene.
+
+**Lösung - eine einzige, app-weite, dauerhafte FlutterEngine:** Statt
+bei jedem `MainActivity`-Start eine neue Engine zu erzeugen, wird jetzt
+GENAU EINE `FlutterEngine` bereits beim Start des Android-**Prozesses**
+erzeugt (`native_android/de/clausjbauer/ontour/OnTourApplication.kt`,
+neue Datei) und im `FlutterEngineCache` abgelegt. `MainActivity`
+verwendet ausschließlich diese eine, geteilte Engine
+(`provideFlutterEngine`) und zerstört sie beim eigenen Beenden
+ausdrücklich NICHT mit (`shouldDestroyEngineWithHost` liefert `false`,
+`cleanUpFlutterEngine` bleibt leer). Der zugrunde liegende Dart-Isolate -
+und damit der komplette In-Memory-Zustand der App, allen voran
+`TrackRecordingService` - lebt dadurch unabhängig von `MainActivity`
+weiter, solange der Android-**Prozess** selbst am Leben bleibt.
+
+**WICHTIG - das allein reicht NICHT aus, sondern wirkt nur in
+Kombination mit dem bereits vorhandenen Foreground-Service:** Eine
+dauerhafte Engine verhindert für sich genommen nicht, dass Android den
+kompletten Prozess unter Speicherdruck beendet, sobald keine sichtbare
+Activity mehr existiert - ein Prozess ohne jede Activity UND ohne
+laufenden Service zählt für Android zu den ZUERST zu beendenden
+("cached") Prozessen. Entscheidend ist daher das Zusammenspiel mit dem
+bereits in Abschnitt 19 beschriebenen Foreground-Service: Solange
+tatsächlich aufgezeichnet wird (`RecordingState.recording`), stuft
+Android den Prozess wegen des laufenden Foreground-Service als hohe
+Priorität ein und beendet ihn unter normalem Speicherdruck praktisch
+nie - unabhängig davon, ob gerade eine Activity existiert. Die
+persistente Engine sorgt in dieser Situation lediglich dafür, dass der
+Dart-Code, der die GPS-Punkte tatsächlich entgegennimmt und verarbeitet,
+währenddessen ebenfalls am Leben bleibt, statt mit `MainActivity`
+zerstört zu werden. Ohne eine aktive Aufzeichnung (kein Foreground-
+Service) bietet diese Änderung dementsprechend KEINEN zusätzlichen
+Schutz vor einem Prozessende - das ist in diesem Fall aber auch nicht
+nötig, da dann ohnehin kein App-Zustand verloren gehen kann, der nicht
+auch durch einen normalen Neustart der App wiederhergestellt würde.
+
+**Notwendige Anpassung in `AndroidManifest.xml`:** Damit Android die
+neue `OnTourApplication`-Klasse tatsächlich verwendet, muss dem
+`<application>`-Tag zusätzlich das Attribut `android:name` gesetzt
+werden:
+
+```xml
+<application
+    android:name=".OnTourApplication"
+    android:label="onTour"
+    ...>
+```
+
+(Falls dein Projekt bereits eine eigene Application-Klasse hat -
+z. B. weil sie ein anderes Paket dafür benötigt -, übertrage stattdessen
+den Inhalt der `onCreate()`-Methode aus `OnTourApplication.kt` in deine
+bestehende Klasse, statt beide parallel zu verwenden; Android erlaubt
+pro App nur eine aktive Application-Klasse.)
+
+**Nebenbemerkung zur Bildschirmausrichtung:** `main()` (siehe
+`main.dart`) läuft durch diese Änderung jetzt bereits beim Start des
+Android-Prozesses, also VOR der ersten Activity - inhaltlich unschädlich
+(die dortigen Initialisierungen wie Silbentrennung oder
+Datumsformatierung laufen dadurch lediglich etwas früher, nicht öfter),
+mit EINER Ausnahme: Der Aufruf
+`SystemChrome.setPreferredOrientations([...])` benötigt intern eine
+bereits vorhandene Activity, um die Ausrichtung tatsächlich zu setzen,
+und könnte deshalb bei diesem allerersten, noch activity-losen Aufruf
+wirkungslos verpuffen (ohne Absturz, nur ohne Effekt). Als robusten,
+von diesem zeitlichen Ablauf unabhängigen Ersatz sollte deshalb
+zusätzlich `android:screenOrientation="portrait"` direkt am
+`<activity>`-Tag von `MainActivity` in der `AndroidManifest.xml` gesetzt
+werden:
+
+```xml
+<activity
+    android:name=".MainActivity"
+    android:screenOrientation="portrait"
+    ...>
+```
+
+Das erzwingt die Hochkantausrichtung bereits auf Betriebssystemebene,
+unabhängig davon, wann bzw. ob der Dart-seitige `SystemChrome`-Aufruf
+tatsächlich greift - der Aufruf in `main.dart` kann trotzdem unverändert
+bestehen bleiben (schadet nicht, ist nur nicht mehr die alleinige
+Absicherung).
+
+**Betroffene/neue Dateien:**
+- `native_android/de/clausjbauer/ontour/OnTourApplication.kt` (NEU)
+- `native_android/de/clausjbauer/ontour/MainActivity.kt` (ersetzt die
+  bisherige Version 1:1, siehe Abschnitt 3 für den Kopiervorgang -
+  enthält weiterhin unverändert die GNSS-Satellitenanzahl-Logik)
+- `AndroidManifest.xml` (zwei neue Attribute, siehe oben)
+
+**Zum Testen (am besten auf dem Samsung S23 Ultra, wie gewohnt):**
+Aufzeichnung starten → App über die "Zuletzt verwendete Apps"-Übersicht
+aus der Liste wischen → einige Minuten warten (idealerweise mit
+tatsächlicher Bewegung, damit neue Punkte hinzukommen) → App erneut
+öffnen. Distanz, Dauer und Punktezahl sollten nahtlos weitergezählt
+haben, statt bei 0 neu zu beginnen. Für den in Abschnitt 19 bereits
+beschriebenen Sonderfall herstellerspezifischer Akku-Optimierung (die
+diese Absicherung umgehen kann) gilt weiterhin die dortige Empfehlung,
+onTour manuell von der Akku-Optimierung auszunehmen.
+
+## 22. Erinnerung bei anhaltend pausierter Track-Aufzeichnung
+
+**Motivation:** Eine automatisch (Stillstand, siehe Abschnitt 6/19) oder
+manuell pausierte Track-Aufzeichnung lässt sich leicht "vergessen" - z. B.
+zuhause angekommen, Smartphone eingesteckt, die App wird für längere Zeit
+gar nicht mehr aktiv geöffnet. Der Foreground-Service läuft während einer
+Pause bewusst NICHT weiter (spart Akku, siehe Abschnitt 19), die
+Aufzeichnung selbst bleibt aber "offen" - der Nutzer bemerkt das im
+schlechtesten Fall erst am spürbar niedrigeren Akkustand oder daran, dass
+ein späterer Blick in die App eine unerwartet lange "Dauer" anzeigt.
+
+**Umsetzung:** Bleibt eine Aufzeichnung länger als eine wählbare Wartezeit
+ununterbrochen pausiert, erscheint eine Benachrichtigung ("Track-
+Aufzeichnung pausiert - jetzt beenden?"), die beim Antippen die App
+öffnet. Die Wartezeit ist unter Einstellungen → Erweitert wählbar (siehe
+Abschnitt 24 für die Unterreiter-Struktur der Einstellungsseite;
+`models/auto_pause_reminder_option.dart`, `AutoPauseReminderOption`: Aus/
+10/20/30/45 Minuten, Standard 20 Minuten) und wird - analog zu den
+übrigen Einstellungen, siehe Abschnitt 5 - über `AppPreferences`
+persistiert. `TrackPage` hält `TrackRecordingService` dafür bei jedem
+Rebuild über `updateReminderOption` mit dem aktuellen Wert synchron; eine
+Änderung wirkt sich - analog zur Genauigkeitsstufe der
+Geschwindigkeitsmessung, siehe Abschnitt 4 - erst auf die NÄCHSTE Pause
+aus, nicht rückwirkend auf eine bereits laufende, bereits geplante
+Erinnerung.
+
+**WICHTIGE Architektur-Entscheidung - nativer `AlarmManager` statt
+Dart-`Timer`:** Ein einfacher, in `TrackRecordingService` laufender
+Dart-`Timer` wäre die naheliegendere Umsetzung gewesen, funktioniert hier
+aber nicht zuverlässig: Genau während einer Pause existiert (bewusst,
+siehe oben) kein Foreground-Service mehr - der Android-Prozess (und mit
+ihm jeder darin laufende Dart-Timer, auch bei der persistenten Engine aus
+Abschnitt 21) kann in dieser Zeit vom Betriebssystem jederzeit beendet
+werden, sobald die App im Hintergrund ist. Die Erinnerung würde dann
+ausgerechnet in den Fällen ausbleiben, vor denen sie eigentlich schützen
+soll. Stattdessen wird der Alarm nativ über Androids `AlarmManager`
+geplant (`native_android/de/clausjbauer/ontour/
+AutoPauseReminderScheduler.kt`, neu) - ein solcher Alarm wird
+systemseitig verwaltet und übersteht das Beenden des App-Prozesses
+vollständig: Beim Auslösen startet Android bei Bedarf kurzzeitig einen
+eigenen, minimalen Prozess für den zugehörigen `BroadcastReceiver`
+(`AutoPauseReminderReceiver.kt`, neu), der die Benachrichtigung anzeigt -
+unabhängig davon, ob die eigentliche App zu diesem Zeitpunkt noch läuft.
+
+**Kommunikation Dart ↔ nativ:** Ein neuer `MethodChannel`
+(`ontour/auto_pause_reminder`) mit den beiden Methoden `schedule`
+(Parameter `delayMinutes`) und `cancel`. `TrackRecordingService` ruft
+`schedule` in `_pauseInternal` auf (gemeinsamer Pfad für MANUELLE und
+AUTOMATISCHE Pause - eine "vergessene" Aufzeichnung droht in beiden
+Fällen gleichermaßen) und `cancel` in `resume`, `stop` sowie `discard`.
+Ein Fehlschlag dieser Aufrufe (z. B. auf einer Plattform ohne die native
+Implementierung) wird bewusst verschluckt statt weitergereicht - die
+Erinnerung ist ein reiner Komfort-Zusatz, der die eigentliche
+Aufzeichnung nicht beeinträchtigen darf.
+
+**WICHTIG, warum der `MethodChannel`-Handler in `OnTourApplication` statt
+in `MainActivity` registriert wird:** Eine Pause (und damit ein
+Schedule-/Cancel-Aufruf) kann JEDERZEIT eintreten - auch dann, wenn
+gerade gar keine Activity existiert (z. B. weil die App aus den zuletzt
+verwendeten Apps entfernt wurde, siehe Abschnitt 21). Ein in
+`MainActivity` registrierter Handler wäre in diesem Fall nicht erreichbar
+bzw. müsste einen möglicherweise bereits zerstörten Activity-`Context`
+verwenden. Der in `OnTourApplication` verwendete `applicationContext`
+bleibt dagegen so lange gültig wie der Android-Prozess selbst.
+
+**Bewusst `setAndAllowWhileIdle` statt einer exakten Alarm-Variante:**
+Für eine reine Erinnerung ist eine durch den Doze-Modus verursachte
+Verschiebung um einige Minuten unproblematisch - dafür ist im Unterschied
+zu exakten Alarmen (`setExactAndAllowWhileIdle`) unter Android 12+ KEINE
+gesonderte, vom Nutzer manuell zu erteilende "Alarme & Erinnerungen"-
+Berechtigung (`SCHEDULE_EXACT_ALARM`) nötig.
+
+**Notwendige Ergänzung in `AndroidManifest.xml`:** Der neue
+`BroadcastReceiver` muss registriert werden (innerhalb von
+`<application>`, analog zu den bestehenden Einträgen):
+
+```xml
+<receiver
+    android:name=".AutoPauseReminderReceiver"
+    android:exported="false" />
+```
+
+Zusätzliche Android-Berechtigungen sind NICHT nötig - `POST_NOTIFICATIONS`
+(ab Android 13) ist bereits seit Abschnitt 2 vorhanden (dort ursprünglich
+für die Foreground-Service-Benachrichtigung ergänzt) und deckt auch diese
+neue Benachrichtigung mit ab; für `setAndAllowWhileIdle` ist - anders als
+für exakte Alarme - keine gesonderte Berechtigung erforderlich (siehe
+oben).
+
+**Falls ein Compile-Fehler zu `androidx.core.app.NotificationCompat`
+auftritt:** Das Symbol ist normalerweise bereits über Flutters eigene
+AndroidX-Abhängigkeiten verfügbar; sollte es dennoch fehlen, in
+`android/app/build.gradle` (bzw. `build.gradle.kts`) unter `dependencies`
+ergänzen: `implementation("androidx.core:core-ktx:1.13.1")` (oder die
+jeweils aktuelle Version).
+
+**Direkter Sprung zum Track-Tab beim Antippen:** Siehe Abschnitt 23 -
+diese ursprünglich als "bewusst nicht umgesetzt" zurückgestellte
+Komfortfunktion wurde inzwischen nachgerüstet.
+
+**Bemerkenswerte Nebeneigenschaft:** Der Alarm feuert unabhängig davon,
+ob der App-Prozess zu diesem Zeitpunkt noch existiert (siehe oben) - sollte
+der Prozess während einer Pause aus irgendeinem Grund dennoch beendet
+werden (z. B. durch besonders aggressives herstellerspezifisches
+Akku-Management, siehe Abschnitt 19), bekommt der Nutzer die Erinnerung
+trotzdem zuverlässig angezeigt.
+
+**Betroffene/neue Dateien:**
+- `lib/models/auto_pause_reminder_option.dart` (NEU)
+- `lib/services/app_preferences.dart` (neue Einstellung)
+- `lib/services/track_recording_service.dart` (Schedule/Cancel-Aufrufe)
+- `lib/ui/settings_page.dart` (neue Auswahl-Sektion, seit Abschnitt 24 im
+  Unterreiter "Erweitert")
+- `lib/ui/track_page.dart` (hält den Service mit der Einstellung synchron)
+- `native_android/de/clausjbauer/ontour/OnTourApplication.kt` (neuer
+  MethodChannel-Handler)
+- `native_android/de/clausjbauer/ontour/AutoPauseReminderScheduler.kt`
+  (NEU)
+- `native_android/de/clausjbauer/ontour/AutoPauseReminderReceiver.kt`
+  (NEU)
+- `AndroidManifest.xml` (neuer `<receiver>`-Eintrag, siehe oben)
+
+## 23. Erinnerungs-Benachrichtigung führt direkt zum Track-Tab
+
+**Motivation:** Die in Abschnitt 22 beschriebene Erinnerung öffnete beim
+Antippen zunächst nur die App auf ihrem Start-Tab (Tacho, siehe Abschnitt
+16) - der Nutzer musste danach selbst zum Track-Tab wechseln, um die
+Aufzeichnung tatsächlich zu beenden oder fortzusetzen. Da genau diese
+Bedienelemente ausschließlich dort liegen, führt ein Antippen jetzt
+direkt zum Track-Tab.
+
+**Umsetzung - Intent-Extra plus "Pull"-Abfrage statt direktem
+Methodenaufruf:** `AutoPauseReminderReceiver` versieht den Klick-Intent
+der Benachrichtigung mit einem zusätzlichen Extra
+(`MainActivity.EXTRA_OPEN_TRACK_TAB`). `MainActivity` wertet dieses Extra
+sowohl in `onCreate` (Activity existierte nicht mehr, z. B. nach einem
+Wischen aus den zuletzt verwendeten Apps, siehe Abschnitt 21) als auch in
+`onNewIntent` (Activity existiert noch, wird lediglich in den Vordergrund
+geholt) aus und merkt sich das Ergebnis in einem neuen, rein
+prozessinternen Objekt `PendingNavigation` (`openTrackTab: Boolean`).
+
+Auf Dart-Seite fragt `HomeShell` diesen Zustand über einen neuen
+`MethodChannel` (`ontour/navigation`, Methode
+`consumePendingOpenTrackTab`) ab - sowohl beim eigenen Start
+(`initState`) als auch bei jedem Zurückkehren in den Vordergrund
+(`WidgetsBindingObserver.didChangeAppLifecycleState`,
+`AppLifecycleState.resumed`). Liefert die Abfrage `true` zurück (und setzt
+den nativen Zustand dabei zugleich zurück), wechselt `HomeShell` per
+`setState` auf den Track-Tab (Index 2).
+
+**WICHTIG, warum "Pull" (Dart fragt nach) statt "Push" (nativ ruft
+proaktiv in Dart hinein):** Ein direkter `MethodChannel`-Aufruf aus
+`MainActivity.onCreate` heraus, unmittelbar nachdem das Intent-Extra
+erkannt wurde, wäre die naheliegendere Umsetzung gewesen. Bei einem
+echten Kaltstart (App-Prozess war komplett beendet, wird erst durch
+Antippen der Benachrichtigung neu gestartet) ist zu diesem sehr frühen
+Zeitpunkt aber nicht garantiert, dass `HomeShell` ihren
+`MethodChannel`-Handler bereits registriert hat - ein zu früher "Push"
+würde dann folgenlos verpuffen (klassische Race Condition bei
+plattformübergreifender Kommunikation direkt nach dem Start). Das
+"Pull"-Modell umgeht das vollständig: `HomeShell` fragt aktiv nach,
+sobald sie tatsächlich bereit ist, beliebig oft und ohne Zeitdruck.
+
+**Notwendige Ergänzung in `AndroidManifest.xml`:** `MainActivity` muss
+auf `launchMode="singleTask"` gesetzt werden, damit ein Antippen der
+Benachrichtigung bei bereits existierender Activity zuverlässig
+`onNewIntent` auf der VORHANDENEN Instanz auslöst, statt eine zweite,
+parallele Instanz zu erzeugen (die sich sonst dieselbe, persistente
+FlutterEngine aus Abschnitt 21 streitig machen würde):
+
+```xml
+<activity
+    android:name=".MainActivity"
+    android:launchMode="singleTask"
+    ...>
+```
+
+**Betroffene/neue Dateien:**
+- `native_android/de/clausjbauer/ontour/MainActivity.kt` (Intent-
+  Auswertung in `onCreate`/`onNewIntent`)
+- `native_android/de/clausjbauer/ontour/PendingNavigation.kt` (NEU)
+- `native_android/de/clausjbauer/ontour/OnTourApplication.kt` (neuer
+  MethodChannel-Handler)
+- `native_android/de/clausjbauer/ontour/AutoPauseReminderReceiver.kt`
+  (Intent-Extra und -Flags beim Klick-Intent)
+- `lib/ui/home_shell.dart` (Abfrage beim Start und bei jedem
+  Vordergrund-Wechsel)
+- `AndroidManifest.xml` (`launchMode="singleTask"`, siehe oben)
+
+## 24. Einstellungsseite: Unterreiter "Anzeige" und "Erweitert"
+
+**Motivation:** Mit der neuen Erinnerungs-Einstellung aus Abschnitt 22
+wären auf der bisher einzigen, flachen Einstellungsseite drei inhaltlich
+sehr unterschiedliche Einstellungen (Anzeigemodus, Genauigkeitsstufe der
+Geschwindigkeitsmessung, Pause-Erinnerung) untereinander gestanden -
+zunehmend unübersichtlich, zumal die beiden letztgenannten deutlich
+seltener angefasst werden als der Anzeigemodus.
+
+**Umsetzung:** `SettingsPage` (`lib/ui/settings_page.dart`) ist jetzt ein
+`StatefulWidget` mit eigenem `TabController` (`SingleTickerProviderStateMixin`)
+und zeigt zwei Unterreiter:
+
+- **Anzeige**: bislang einzige Einstellung, der Anzeigemodus
+  (System/Hell/Dunkel, siehe Abschnitt 5).
+- **Erweitert**: die Genauigkeitsstufe der Geschwindigkeitsmessung (bisher
+  Abschnitt 4) sowie die neue Pause-Erinnerung (Abschnitt 22) - beide
+  eher technische Einstellungen, die man in der Regel einmal passend zum
+  eigenen Gerät einstellt und danach kaum noch ändert.
+
+Die Unterreiter sitzen bewusst INNERHALB der bestehenden Hauptseite
+"Einstellungen" (`TabBar`/`TabBarView` im `build()` von `SettingsPage`,
+unterhalb der von `HomeShell` weiterhin gemeinsam bereitgestellten
+`AppBar`) - NICHT als zusätzlicher, fünfter Eintrag in der unteren
+Navigationsleiste: Die Aufteilung ist rein organisatorisch eine Ebene
+unterhalb von "Einstellungen", keine gleichberechtigte weitere Hauptseite
+der App.
+
+**Zur Beschriftung der Unterreiter:** Bewusst normale `Text`-Labels statt
+`AutoHyphenatingText` - bei den hier kurzen, einzeiligen Bezeichnungen
+("Anzeige", "Erweitert") wäre eine Silbentrennung ohnehin nie nötig,
+analog zur bereits bestehenden Ausnahme bei `SegmentedButton` (siehe
+Abschnitt 13).
+
+**Keine Auswirkung auf persistierte Werte:** Alle drei Einstellungen
+bleiben unverändert über `AppPreferences`/`shared_preferences`
+persistiert (siehe Abschnitt 5) - die Umstrukturierung betrifft
+ausschließlich die Darstellung, nicht die Speicherung.
+
+**Betroffene Dateien:**
+- `lib/ui/settings_page.dart` (grundlegend umgebaut: `StatelessWidget` →
+  `StatefulWidget` mit `TabController`, Inhalte in `_buildDisplayTab`
+  bzw. `_buildAdvancedTab` aufgeteilt)
+
+## 25. Wählbares Positionsformat auf der Kompass-Seite (DMS/DMM/DD/UTM)
+
+**Motivation:** Bislang war DMS (Grad/Minuten/Sekunden) das einzige,
+fest einprogrammierte Anzeigeformat für die aktuelle Position auf der
+Kompass-Seite. Je nach Hintergrund sind aber unterschiedliche Formate
+gebräuchlich bzw. leichter mit vorhandenem Kartenmaterial abzugleichen -
+UTM etwa in Vermessung und vielen (insbesondere militärisch geprägten
+oder älteren) topografischen Karten, DD (Dezimalgrad) für die direkte
+Eingabe in viele Online-Kartendienste.
+
+**Umsetzung:** Eine neue Auswahl unter Einstellungen → Anzeige (siehe
+Abschnitt 24), "Positionsformat (Kompass-Seite)"
+(`models/position_display_format.dart`, `PositionDisplayFormat`):
+
+| Format | Beispiel | Typischer Einsatzbereich |
+|---|---|---|
+| DMS (Standard) | 52° 37' 12,3" N | Nautik, Outdoor - bisheriges, einziges Format |
+| DMM | 52° 37,205' N | Viele handelsübliche GPS-Geräte |
+| DD | 52,62008° N | Einfache Dezimaldarstellung, Online-Kartendienste |
+| UTM | 32U 599035 5674453 | Vermessung, topografisches Kartenwerk |
+
+Persistiert wie die übrigen Einstellungen über `AppPreferences` (siehe
+Abschnitt 5). Anders als z. B. die Genauigkeitsstufe der
+Geschwindigkeitsmessung (wirkt laut Abschnitt 4 erst beim nächsten
+Öffnen der Tacho-Seite) wird ein Formatwechsel auf der Kompass-Seite
+SOFORT sichtbar - dafür hört `CompassPage` per `ListenableBuilder` direkt
+auf `AppPreferences`. Das ist hier unproblematisch (anders als bei der
+Genauigkeitsstufe), da sich lediglich die TEXTDARSTELLUNG eines bereits
+vorliegenden GPS-Werts ändert, kein Sensor-Stream neu gestartet werden
+muss. Dafür bekommt `CompassPage` jetzt (wie `SpeedPage`, `TrackPage`,
+`SettingsPage` bereits zuvor) `AppPreferences` als Konstruktor-Parameter
+durchgereicht (siehe `HomeShell._buildPage`).
+
+**DMS/DMM/DD - Breite und Länge bleiben JEWEILS in einer eigenen Zeile**
+(wie bisher), nur die Formatierung selbst ändert sich
+(`util/coordinate_formatter.dart`, `CoordinateFormatter.formatPosition`).
+
+**UTM - Sonderfall EINE gemeinsame Zeile statt zwei:** Breite und Länge
+fließen bei UTM gemeinsam in EINE Positionsangabe ein (Zone,
+Zonenbuchstabe, Rechtswert, Hochwert) - es gibt fachlich keine getrennte
+"Breite"/"Länge" mehr. `CompassPage` behandelt die Zeilenanzahl deshalb
+nicht mehr als fest (früher zwei `AutoHyphenatingText`-Widgets), sondern
+iteriert über die von `CoordinateFormatter.formatPosition` gelieferte
+`List<String>` (ein oder zwei Einträge, je nach Format) - siehe
+`_positionLines`, `_buildTextBlock`. Die Genauigkeitszeile darunter
+(`_positionAccuracyText`) bleibt davon unberührt, da sie sich auf die
+zugrunde liegende GPS-Messung bezieht, nicht auf deren Darstellung.
+
+**UTM-Umrechnung - Implementierungsdetails:** Klassische Transversale-
+Merkator-Projektion (WGS84-Ellipsoid) nach den weit verbreiteten, auf
+Snyder (1987, "Map Projections - A Working Manual") zurückgehenden
+Formeln - direkt in Dart implementiert (`CoordinateFormatter._formatUtm`),
+ohne zusätzliche Paketabhängigkeit. Genauigkeit im Bereich weniger
+Zentimeter für die hier relevanten mittleren Breiten, mehr als
+ausreichend gegenüber der GPS-eigenen Ungenauigkeit von i. d. R. mehreren
+Metern (`positionAccuracyMeters`, siehe Abschnitt 10).
+
+**Bewusst NICHT berücksichtigt bei UTM:** die Sonderzonen für Norwegen/
+Spitzbergen (dort weichen einzelne UTM-Zonengrenzen von der sonst
+regelmäßigen 6°-Einteilung ab) sowie die Polargebiete jenseits von
+±80°/84° Breite (dort ist genau genommen das UPS-System gebräuchlich,
+nicht UTM) - für den nautischen/Outdoor-Einsatzzweck dieser App an
+praktisch jedem anderen Ort der Erde ohne Belang; bei Bedarf jederzeit
+nachrüstbar. Außerhalb dieses Bereichs liefert die Zonenbuchstaben-
+Ermittlung einen neutralen Platzhalter ("Z") statt abzustürzen.
+
+**Betroffene/neue Dateien:**
+- `lib/models/position_display_format.dart` (NEU)
+- `lib/services/app_preferences.dart` (neue Einstellung)
+- `lib/util/coordinate_formatter.dart` (DMM/DD/UTM ergänzt,
+  `formatPosition` als neuer, formatübergreifender Einstiegspunkt)
+- `lib/ui/compass_page.dart` (nimmt jetzt `AppPreferences` entgegen,
+  `ListenableBuilder` für sofortige Reaktion, dynamische Zeilenanzahl)
+- `lib/ui/settings_page.dart` (neue Auswahl-Sektion im Unterreiter
+  "Anzeige")
+- `lib/ui/home_shell.dart` (reicht `preferences` an `CompassPage` durch)
+
+## 26. "Erweitert"-Tab: Dropdown statt Radio-Buttons
+
+**Motivation:** Genauigkeitsstufe der Geschwindigkeitsmessung (3
+Optionen) und Pause-Erinnerung (5 Optionen) zeigten als `RadioListTile`
+jede Option samt vollständiger Beschreibung gleichzeitig an - auf dem
+"Erweitert"-Tab (siehe Abschnitt 24) beanspruchte das spürbar viel
+vertikalen Platz, gerade bei der Pause-Erinnerung mit ihren fünf
+Optionen.
+
+**Umsetzung:** Beide Abschnitte (`_buildSpeedAccuracySection`,
+`_buildAutoPauseReminderSection` in `lib/ui/settings_page.dart`) nutzen
+jetzt `DropdownButtonFormField` statt `RadioGroup`/`RadioListTile`. Nur
+die Beschreibung der AKTUELL gewählten Option erscheint als eigener
+Text darunter - die Beschreibungen der übrigen, gerade nicht gewählten
+Optionen sind erst nach dem Aufklappen des Dropdowns sichtbar (dort
+zeigt Flutter aus Platzgründen ohnehin nur die Labels, keine
+Beschreibungen). Die einleitende Hinweis-Kachel (Akku-Symbol samt
+Erklärtext) bleibt bei der Genauigkeitsstufe unverändert bestehen, da
+sie sich auf die Auswahl als Ganzes bezieht, nicht auf eine einzelne
+Option.
+
+**BEWUSST NICHT geändert:** Die Positionsformat-Auswahl
+(`_buildPositionDisplayFormatSection`, Unterreiter "Anzeige", siehe
+Abschnitt 25) bleibt bei `RadioGroup`/`RadioListTile` - hier wurde
+gezielt nur der "Erweitert"-Tab angepasst.
+
+**Fehlerkorrektur:** `DropdownButtonFormField` verwendete zunächst den
+Parameter `value` - in neueren Flutter-Versionen zugunsten von
+`initialValue` deprecated (reine Umbenennung zur Vereinheitlichung mit
+anderen Form-Feldern wie `TextFormField`, kein Verhaltensunterschied).
+Korrigiert.
+
+**Betroffene Dateien:**
+- `lib/ui/settings_page.dart`
+
+## 27. Barometrische Höhe fließt in die Track-Aufzeichnung (und damit in Export/Import) ein
+
+**Ausgangslage:** Die Kompass-Seite nutzt seit Abschnitt 10 bereits die
+deutlich präzisere, gegen GPS kalibrierte Barometer-Höhe
+(`BarometerAltitudeService`) für ihre Höhenanzeige. `TrackRecordingService`
+verwendete für jeden aufgezeichneten `TrackPoint` bislang aber
+ausschließlich die (deutlich ungenauere, siehe Abschnitt 10) GPS-
+Rohhöhe (`Position.altitude`) - unabhängig davon, ob das Gerät ein
+Barometer besitzt.
+
+**Umsetzung:** `TrackRecordingService` hält jetzt eine eigene
+`BarometerAltitudeService`-Instanz und kalibriert sie laufend gegen die
+eigene, ohnehin für den Trackpunkt selbst verwendete GPS-Position (siehe
+`_onPosition`) - ein zusätzlicher, eigener Standort-Stream wie ihn die
+Kompass-Seite über `AltitudeService` nutzt, ist dafür NICHT nötig, das
+spart zusätzlichen GPS-/Akkuverbrauch. Sobald ein kalibrierter
+Barometer-Wert vorliegt, wird er bevorzugt gegenüber der GPS-Rohhöhe für
+den `altitudeMeters`-Wert jedes neuen `TrackPoint` verwendet
+(`_currentBarometerAltitudeMeters`), andernfalls (Gerät ohne Barometer,
+oder direkt nach dem Start noch keine Kalibrierung erfolgt) fällt es auf
+die GPS-Rohhöhe zurück - fachlich identisch zur bereits bestehenden
+Logik auf der Kompass-Seite.
+
+Das Barometer-Listening läuft - analog zum Beschleunigungssensor für die
+Stillstandserkennung (`MotionService`, siehe Abschnitt 6/19) - über die
+GESAMTE Aufzeichnung hinweg, auch während einer Pause: Der Sensor selbst
+verbraucht (anders als GPS) praktisch keinen nennenswerten zusätzlichen
+Akku, und so liegt nach einem Fortsetzen sofort wieder ein aktueller
+Wert vor, statt erst auf eine neue Kalibrierung warten zu müssen.
+
+**Export UND Import waren bereits vorbereitet, keine Änderung nötig:**
+`TrackPoint.altitudeMeters` ist ein generisches, quellenunabhängiges
+Feld - `GpxConverter.encode`/`.decode` (siehe Abschnitt 20) lesen und
+schreiben es bereits unverändert als `<ele>`-Element, ohne zwischen GPS-
+und Barometer-Herkunft zu unterscheiden (eine GPX-Datei kennt diesen
+Unterschied grundsätzlich nicht - `<ele>` ist schlicht "die Höhe an
+diesem Punkt"). Die einzige Änderung war deshalb die Quelle, aus der der
+Wert beim Aufzeichnen selbst stammt - Export und Import profitieren
+automatisch, ohne selbst angefasst werden zu müssen.
+
+**Fehlerkorrektur (im Zuge dieser Änderung entdeckt):** Sowohl die neue
+Barometer-Subscription in `TrackRecordingService` als auch die bereits
+bestehende auf der Kompass-Seite (`compass_page.dart`) bekamen einen
+expliziten `onError`-Handler spendiert. Grund: `BarometerAltitudeService`
+reicht Sensor-Fehler (z. B. auf einem Gerät ganz ohne Barometer) bewusst
+über den `StreamController` weiter, statt sie selbst zu verschlucken
+(anders als z. B. `MotionService`) - ohne einen `onError`-Handler an der
+`listen(...)`-Aufrufstelle hätte das einen unbehandelten Stream-Fehler
+zur Folge gehabt. In beiden Fällen bedeutet ein Fehler schlicht: es
+bleibt bei der GPS-Höhe, kein Absturz.
+
+**Betroffene Dateien:**
+- `lib/services/track_recording_service.dart`
+- `lib/ui/compass_page.dart` (nur die Fehlerkorrektur, siehe oben)
+
+## 28. Kompassrose vergrößert
+
+**Auf Wunsch angehoben:** Die Stellschrauben aus Abschnitt 10, die die
+maximale Größe der Kompassrose begrenzen (`CompassPage._buildBody`/
+`build`, `LayoutBuilder`):
+
+| Wert | Vorher | Jetzt |
+|---|---|---|
+| `maxDialSize` (absolute Obergrenze in logischen Pixeln) | 280 | 360 |
+| Anteil der verfügbaren Höhe | 42 % | 48 % |
+| Anteil der verfügbaren Breite | 100 % (volle Breite) | 80 % |
+
+`minDialSize` (120) sowie die grundsätzliche Berechnungslogik (`min` aus
+einem Anteil der verfügbaren Breite und einem Anteil der verfügbaren
+Höhe, per `clamp` auf den Bereich zwischen Minimal- und Maximalwert
+begrenzt) bleiben unverändert.
+
+**Neu hinzugekommen - Breitenbegrenzung auf 80 %:** Die Kompassrose
+nutzte bislang bei Bedarf die VOLLE verfügbare Breite aus. Jetzt bleibt
+zusätzlich links und rechts etwas "Luft" (`maxWidthFraction = 0.8`) -
+wirkt dadurch weniger erdrückend/kantenständig, gerade auf schmaleren
+Geräten oder im Hochformat mit viel Breite relativ zur Höhe. Die Rose
+bleibt dabei automatisch horizontal zentriert (`Align(alignment:
+Alignment.topCenter)` um die `SizedBox` mit der berechneten Kantenlänge)
+- dafür war keine zusätzliche Anpassung nötig.
+
+**Warum das gefahrlos möglich ist:** Der Textblock darunter (Kurs, Höhe,
+Position) ist bereits seit Abschnitt 10 über ein
+`FittedBox(fit: BoxFit.scaleDown)` abgesichert - er passt sich
+automatisch an den nach Abzug der (jetzt größeren) Kompassrose
+verbleibenden Platz an und verkleinert sich bei Bedarf einfach weiter.
+Eine Überlappung zwischen Kompassrose und Textblock kann dadurch auf
+keiner Bildschirmgröße bzw. Systemschriftgröße entstehen - im
+ungünstigsten Fall (kleiner Bildschirm, große Systemschrift) wirkt sich
+die Anhebung schlicht kaum aus, da dann ohnehin schon vorher der durch
+`availableHeight * 0.48` bestimmte, nicht der feste `maxDialSize`-Wert
+die eigentliche Grenze war.
+
+**Betroffene Dateien:**
+- `lib/ui/compass_page.dart`
+
+## 29. Track-Seite und Track-Detailansicht: Unterreiter "Karte" und "Details" mit Momentanwerten und Profil-Diagrammen
+
+**Motivation:** Die Karte war bislang der einzige Inhalt sowohl der
+laufenden Aufzeichnung (`TrackPage`) als auch der Ansicht eines bereits
+gespeicherten Tracks (`TrackDetailPage`). Wichtige Kennzahlen zum
+zurückgelegten Höhenverlauf, zur Steigung und zum Geschwindigkeitsverlauf
+waren gar nicht einsehbar - weder als aktueller Momentanwert noch als
+Verlauf über die gesamte Strecke.
+
+**Umsetzung - zwei neue Unterreiter, analog zur Einstellungsseite (siehe
+Abschnitt 24):**
+
+- **`TrackPage`** (laufende Aufzeichnung): "Karte" (bisheriger, alleiniger
+  Inhalt) und "Details" (NEU). Die Unterreiter sitzen - wie bei
+  `SettingsPage` - im `body` (TrackPage teilt sich die `AppBar` mit den
+  übrigen Hauptseiten über `HomeShell`, hat also keine eigene). Die
+  Start-/Pause-/Beenden-Steuerung bleibt bewusst AUSSERHALB der
+  Unterreiter, unterhalb von beiden gleichermaßen sichtbar - der Nutzer
+  soll die Aufzeichnung auch pausieren/beenden können, während er gerade
+  die Details betrachtet.
+- **`TrackDetailPage`** (gespeicherter Track): ebenfalls "Karte" und
+  "Details". Hier sitzt die `TabBar` dagegen direkt in der eigenen
+  `AppBar` dieser Seite (`bottom: TabBar(...)`), da `TrackDetailPage`
+  (anders als `TrackPage`) eine eigenständige, per `Navigator.push`
+  geöffnete Seite mit eigener `AppBar` ist - das ist der dafür
+  vorgesehene, idiomatische Flutter-Weg. Enthält KEINEN "Karte"/"Details"-
+  Wechsel, wenn der Track gar keine Positionsdaten hat (`_points.isEmpty`)
+  - dann wie bisher direkt die Hinweismeldung ohne Tabs.
+
+**Details-Tab von `TrackPage` - Momentanwerte:**
+
+| Wert | Herkunft |
+|---|---|
+| Geschwindigkeit | `Position.speed` des letzten Punkts (km/h) |
+| Kurs | `Position.heading` (Course over Ground aus dem GPS-Signal) |
+| Höhenänderung seit Start | aktuelle Höhe minus Höhe des ERSTEN Punkts - kann negativ werden |
+| Steigung / Gefälle | siehe unten, `TrackProfileCalculator` |
+
+**WICHTIG - "Kurs" hier ist NICHT derselbe Wert wie auf der
+Kompass-Seite:** Die Kompass-Seite zeigt den Magnetkompass-Kurs
+(`CompassService`, Magnetometer, siehe README-Antwort zur entsprechenden
+Nutzerfrage sowie Abschnitt 10). Der "Kurs" auf dem Track-Details-Tab ist
+dagegen der GPS-seitige "Course over Ground" (`Position.heading`,
+tatsächliche Bewegungsrichtung über Grund) - inhaltlich der für eine
+Streckenaufzeichnung sinnvollere Wert (entspricht bei Bewegung i. d. R.
+näherungsweise dem Magnetkompass-Kurs, bei Stillstand oder Rückwärts-/
+Seitwärtsbewegung aber nicht zwingend). Bewusst KEINE zusätzliche
+`CompassService`-Instanz auf der Track-Seite, um nicht unnötig einen
+weiteren Sensor zu belegen - der Wert fällt beim ohnehin laufenden
+GPS-Stream mit an.
+
+**Details-Tab von `TrackDetailPage`:** AUSSCHLIESSLICH die vier
+Profil-Diagramme, bewusst OHNE Momentanwerte-Karte - ein bereits
+abgeschlossener Track hat kein sinnvolles "jetzt" mehr.
+
+**Die vier Profil-Diagramme (beide Seiten, `widgets/track_profile_charts.dart`):**
+
+1. Geschwindigkeitsprofil (km/h)
+2. Höhenprofil (m ü. NN, absolute Höhe)
+3. Anstiegsprofil - Höhenänderung seit Start (m, kann negativ werden)
+4. Steigung/Gefälle (%, kann negativ werden)
+
+Diagramme 3 und 4 entsprechen inhaltlich exakt den beiden letzten
+Momentanwerten von `TrackPage` (Höhenänderung, Steigung/Gefälle), nur
+als Verlauf über die gesamte bisherige/komplette Strecke statt als
+Einzelwert "jetzt".
+
+**Gemeinsame x-Achse - Distanz statt Zeit:** Alle vier Diagramme nutzen
+die seit dem ersten Punkt zurückgelegte Strecke (km) als x-Achse, nicht
+die verstrichene Zeit - anschaulicher für Höhen-/Steigungsprofile und
+näher an der Darstellung, wie sie von Wander-/Radkarten bekannt ist. Bei
+längeren Pausen "steht" die Kurve dadurch praktisch still, statt einen
+langen flachen Abschnitt zu erzeugen, wie es bei einer Zeit-x-Achse der
+Fall wäre.
+
+**Neues Datenfeld `TrackPoint.speedMetersPerSecond`:** Damit auch für
+BEREITS GESPEICHERTE Tracks ein echtes (statt nur aus Distanz/Zeit
+geschätztes) Geschwindigkeitsprofil möglich ist, speichert
+`TrackRecordingService` jetzt zusätzlich die vom Gerät gemessene
+Momentan-Geschwindigkeit (`Position.speed`) in jedem `TrackPoint` (JSON-
+Feld `spd`). Rückwärtskompatibel: `TrackPoint.fromJson` liefert für
+VOR dieser Änderung gespeicherte Dateien einfach `null` (Feld fehlt
+dort), `GpxConverter.decode` setzt es für importierte GPX-Tracks
+grundsätzlich auf `null` (GPX kennt kein Standardfeld für die
+Geschwindigkeit, siehe Abschnitt 20) - `TrackProfileCalculator` schätzt
+in beiden Fällen ersatzweise aus Distanz/Zeit zum vorherigen Punkt.
+
+**`util/track_profile_calculator.dart` (NEU):** Reine, zustandslose
+Umwandlungslogik (analog zu `GpxConverter`/`CoordinateFormatter`) - macht
+aus einer `List<TrackPoint>` eine `List<TrackProfilePoint>` mit
+kumulierter Distanz, (ggf. geschätzter) Geschwindigkeit,
+Höhenänderung seit Start und Steigung/Gefälle. Die Steigungsberechnung
+verwendet dabei bewusst NICHT zwingend den unmittelbar vorherigen Punkt,
+sondern sucht rückwärts nach dem letzten Punkt, der mindestens 5 m
+entfernt liegt (`_minGradientSegmentMeters`) - bei sehr eng
+beieinanderliegenden Punkten würde sonst schon eine kleine
+Höhen-Messungenauigkeit (auch mit der präziseren Barometer-Höhe aus
+Abschnitt 27 nie exakt Null) durch den kleinen Nenner zu unrealistisch
+großen Prozentwerten hochgerechnet. Zusätzlich werden Prozentwerte auf
+±40 % gedeckelt (`_maxAbsGradientPercent`), damit ein einzelner
+Messausreißer nicht die gesamte Diagramm-Skala verzerrt.
+
+**`ui/widgets/profile_chart.dart` (NEU) - eigenes Diagramm-Widget statt
+Paketabhängigkeit:** Ein einfaches, selbst gezeichnetes
+(`CustomPainter`) Liniendiagramm mit gefüllter Fläche unter der Kurve,
+y-Achsen-Beschriftung (Minimum/Mitte/Maximum) und x-Achsen-Beschriftung
+(Distanz-Spanne) - bewusst KEIN zusätzliches Chart-Paket als
+Abhängigkeit, sondern passend zum bisherigen Stil dieses Projekts
+(vollständig selbst gezeichnete, großformatige Anzeigen, siehe
+`CompassDial`, `SevenSegmentDisplay`) umgesetzt. Diagramme mit
+möglicherweise negativen Werten (Anstieg, Steigung/Gefälle) erhalten
+zusätzlich eine hervorgehobene Null-Linie (`showZeroLine`), damit auf
+einen Blick sichtbar ist, ob gerade auf- oder abwärts geht.
+
+**`ui/widgets/track_profile_charts.dart` (NEU):** Bündelt die vier
+`ProfileChart`-Instanzen zu einer gemeinsamen Spalte - von BEIDEN Seiten
+verwendet (`TrackPage` und `TrackDetailPage`). Nimmt bewusst bereits
+BERECHNETE `TrackProfilePoint`s entgegen statt selbst
+`TrackProfileCalculator.compute` aufzurufen: Auf `TrackPage` werden
+dieselben Werte zusätzlich für die Momentanwerte-Karte benötigt, die
+Berechnung soll pro Rebuild nur einmal erfolgen.
+
+**Scrollverhalten:** Beide Details-Tabs sind in ein
+`SingleChildScrollView` eingebettet - Momentanwerte-Karte (nur
+`TrackPage`) plus vier Diagramme finden auf den meisten Bildschirmen
+nicht komplett ohne Scrollen Platz.
+
+**Bewusst nicht optimiert - Neuberechnung bei jedem Rebuild:** Auf
+`TrackPage` wird `TrackProfileCalculator.compute` bei JEDEM Rebuild des
+Details-Tabs neu ausgeführt (ausgelöst durch den ohnehin schon
+laufenden 1-Sekunden-Ticker bzw. jeden neuen Punkt, siehe Abschnitt 16/19)
+- für die bei einer typischen Aufzeichnung zu erwartende Punktezahl
+(einige Hundert bis wenige Tausend) unproblematisch schnell, bei sehr
+langen Mehrstunden-Aufzeichnungen ließe sich das bei Bedarf noch auf eine
+inkrementelle Berechnung umstellen (bislang nicht nötig).
+
+**Betroffene/neue Dateien:**
+- `lib/models/track_point.dart` (neues Feld `speedMetersPerSecond`)
+- `lib/util/gpx_converter.dart` (setzt das neue Feld beim Import auf
+  `null`)
+- `lib/services/track_recording_service.dart` (erfasst Geschwindigkeit
+  und Kurs)
+- `lib/util/track_profile_calculator.dart` (NEU)
+- `lib/ui/widgets/profile_chart.dart` (NEU)
+- `lib/ui/widgets/track_profile_charts.dart` (NEU)
+- `lib/ui/track_page.dart` (Unterreiter, Momentanwerte-Karte)
+- `lib/ui/track_detail_page.dart` (Unterreiter)
+
+**Fehlerkorrektur:** `package:intl` bringt eine eigene `TextDirection`-
+Klasse mit (für bidirektionalen Text, LTR/RTL/UNKNOWN, Teil der
+Bidi-Unterstützung von intl) - kollidiert mit Flutters eigenem
+`TextDirection` (aus `dart:ui`, re-exportiert über `material.dart`),
+sobald beide Pakete gemeinsam importiert UND `TextDirection` tatsächlich
+verwendet wird (hier: `TextPainter` in `profile_chart.dart`). Fehlerbild:
+"The argument type 'TextDirection' can't be assigned to the parameter
+type 'TextDirection?'" - der Compiler zog das falsche der beiden
+gleichnamigen `TextDirection` heran. Behoben durch
+`import 'package:intl/intl.dart' hide TextDirection;` in
+`profile_chart.dart` (das intl-eigene `TextDirection` wird dort ohnehin
+nicht benötigt).
+
+## 30. Mehrere Fehlerkorrekturen nach ausführlichem Praxistest
+
+Sammelt vier voneinander unabhängige Korrekturen, die sich bei
+intensivem Testen auf dem S23 Ultra gezeigt haben.
+
+### 30.1 Y-Achsen-Beschriftung der Profil-Diagramme unlesbar
+
+**Fehler:** In `ProfileChart._drawGridAndLabels` lag der Ankerpunkt der
+rechtsbündigen y-Achsen-Beschriftung bei x=0. Da bei rechtsbündigem Text
+die Textbreite VOM Anker ABGEZOGEN wird, um die linke Startposition zu
+erhalten, landete diese bei x=0 minus Textbreite - also im Negativen und
+damit außerhalb der sichtbaren Zeichenfläche.
+
+**Korrektur:** Ankerpunkt auf `_yAxisLabelWidth - 6` (den rechten Rand
+des dafür vorgesehenen Beschriftungsbereichs, direkt vor dem eigentlichen
+Diagrammbereich) korrigiert.
+
+### 30.2 Steigungswerte fluktuierten unrealistisch stark (±5 % auf ebener Strecke)
+
+**Ursache gefunden:** `BarometerAltitudeService.calibrate()` wurde bei
+JEDER einzelnen GPS-Messung aufgerufen (siehe `TrackRecordingService._onPosition`,
+Abschnitt 27) - und setzte dabei jedes Mal die komplette Höhen-/
+Druck-Referenz neu, nicht nur die Position. Der eigentliche Zweck des
+Barometers - eine feine, praktisch rauschfreie RELATIVE Höhenänderung
+gegenüber einem Referenzpunkt zu liefern (siehe Abschnitt 10) - wurde
+dadurch bei jeder Neukalibrierung wieder auf die selbst deutlich
+ungenauere GPS-Höhe "zurückgesetzt", noch bevor sich die Glättung
+überhaupt bemerkbar machen konnte. Bei einem `TrackProfileCalculator`-
+Mindestabstand von bis dahin nur 5 m zwischen den Vergleichspunkten
+reichten schon 10-20 cm GPS-Höhenrauschen für mehrere Prozent Ausschlag.
+
+**Zwei Korrekturen (siehe dortige Kommentare für Details):**
+
+1. `BarometerAltitudeService.calibrate()`: Die eigentliche Höhen-/
+   Druck-Referenz wird jetzt höchstens einmal pro Minute
+   (`_minRecalibrationInterval`) tatsächlich übernommen - wetterbedingte
+   Luftdruckänderungen sind über eine Minute ohnehin vernachlässigbar
+   gering, die Barometer-Glättung kommt so tatsächlich zum Tragen.
+   Position (Breite/Länge/Genauigkeit) ist von dieser Drosselung bewusst
+   AUSGENOMMEN und bleibt weiterhin bei jedem Aufruf aktuell (wichtig für
+   die Positionsanzeige auf der Kompass-Seite, Abschnitt 25).
+2. `TrackProfileCalculator._minGradientSegmentMeters`: von 5 m auf 20 m
+   angehoben - als zweite, ergänzende Schutzschicht.
+
+### 30.3 Momentanwerte-Karte: volle Breite und größere Schrift
+
+**Vorher:** `Wrap` mit vier `SizedBox(width: 150)`-Einträgen - nutzte
+die verfügbare Kartenbreite nicht aus, Werte in `titleMedium`.
+
+**Jetzt:** 2×2-Raster aus zwei `Row`s mit je zwei `Expanded`-Zellen
+(nutzt die volle verfügbare Breite gleichmäßig), Wertgröße auf
+`headlineSmall` angehoben - analog zur bereits bestehenden Vergrößerung
+der Info-Zeilen auf der Tacho-Seite (siehe Abschnitt 11,
+`_readableInfoStyle`).
+
+### 30.4 Verlorene Aufzeichnungen bei längerem Hintergrundbetrieb bzw. nach Wischen
+
+Das gravierendste der gemeldeten Probleme - dazu vorab **ehrlich**: Ich
+kann die genaue Ursache ohne Zugriff auf dein Gerät (insbesondere ein
+`adb logcat`-Mitschnitt während des Auftretens) nicht mit letzter
+Sicherheit bestimmen. Recherche zu bekannten geolocator-Eigenheiten
+förderte aber zwei sehr plausibel passende Fundstellen zutage:
+
+- Ein Pull Request im geolocator-Projekt ("Android location stream not
+  cancelling", #1153) beschreibt einen Fehler beim Zusammenspiel des
+  nativen Standort-Service mit MEHREREN verbundenen FlutterEngines bzw.
+  einer Unterscheidung zwischen "Stream explizit vom Nutzer beendet" und
+  "Activity-Prozess wird zerstört" - beides trifft auf unsere in
+  Abschnitt 21 bewusst eingeführte persistente FlutterEngine-Architektur
+  zu, die von den sonst üblichen Annahmen (eine Engine pro Activity-
+  Lebenszyklus) abweicht.
+- Ein bekannter geolocator-Fehlerbericht (#1178) zeigt eine
+  `PlatformException` ("Service.startForeground() not allowed") beim
+  Neustart des Standort-Service aus dem Hintergrund heraus - eine seit
+  Android 12 bestehende Einschränkung.
+
+**Was in jedem Fall ein echter, unabhängig vom genauen Auslöser
+vorhandener Bug war:** Der Positions-Stream in `TrackRecordingService`
+hatte BISHER GAR KEINE Fehlerbehandlung (`_startListening` endete
+einfach mit `.listen(_onPosition)`, ohne `onError`/`onDone`). Ein Fehler
+wie die oben genannte `PlatformException` wäre dadurch schlicht
+STILLSCHWEIGEND verschluckt worden - keine weiteren Punkte mehr, ohne
+dass die App davon irgendetwas gemerkt hätte. Das ist jetzt behoben:
+
+**Korrektur 1 - automatischer Neustart-Versuch bei Fehlern:**
+`_startListening` behandelt `onError` UND `onDone` jetzt aktiv
+(`cancelOnError: false`, damit ein Fehler nicht automatisch das Ende der
+Subscription bedeutet) und versucht bei einem Fehler bzw. einem
+unerwarteten Stream-Ende automatisch einen Neustart - mit exponentiell
+steigender Wartezeit zwischen den Versuchen (2/4/8/16/30 Sekunden,
+`_retryDelaysSeconds`), um kein Totlaufen bei dauerhaft bestehenden
+Problemen (z. B. entzogene Berechtigung) zu riskieren. Ein erfolgreich
+empfangener Punkt setzt den Fehlerzähler zurück.
+
+**Korrektur 2 - Checkpoint-Sicherung als Sicherheitsnetz gegen den
+Extremfall (Prozess stirbt trotzdem):** Selbst mit robusterer
+Fehlerbehandlung bleibt ein Restrisiko, dass der komplette App-Prozess
+aus einem der oben genannten (oder einem noch unbekannten) Grund
+tatsächlich beendet wird - in diesem Fall würde Korrektur 1 nicht mehr
+greifen können, da mit dem Prozess auch der komplette Dart-Zustand
+verloren geht. Deshalb schreibt `TrackRecordingService` die bisher
+gesammelten Punkte jetzt zusätzlich periodisch (höchstens alle 15
+Sekunden, `_minCheckpointInterval`) als Checkpoint-Datei
+(`ontour_recording_checkpoint.json`, bewusst AUSSERHALB des
+`tracks/`-Verzeichnisses von `TrackStorageService`, damit sie nie
+versehentlich in der Liste gespeicherter Tracks auftaucht) in das
+app-eigene Dokumentenverzeichnis. Diese Datei wird bei jedem REGULÄREN
+Beenden (`stop`/`discard`) automatisch wieder gelöscht.
+
+Findet `TrackPage` beim Öffnen (nur relevant, solange `state` noch
+`idle` ist) eine solche Checkpoint-Datei vor, bedeutet das: Die letzte
+Aufzeichnung wurde nicht regulär beendet - ein Dialog bietet an, sie als
+Track zu speichern ("Wiederhergestellte Aufzeichnung vom ...") oder zu
+verwerfen. Die Distanz wird dabei aus den geretteten Punkten neu
+berechnet; eine pausenbereinigte Dauer wie bei einer regulär beendeten
+Aufzeichnung gibt es naturgemäß nicht mehr (die Dauer entspricht der
+Differenz zwischen erstem und letztem Zeitstempel).
+
+**Was ich zusätzlich empfehle, falls das Problem weiterhin auftritt:**
+1. `flutter pub outdated` ausführen und `geolocator`/`geolocator_android`
+   auf die neueste Version bringen - falls die oben verlinkte
+   Fehlerkorrektur #1153 in deiner aktuell installierten Version noch
+   nicht enthalten ist, könnte ein Update allein schon helfen.
+2. Falls es erneut auftritt: `adb logcat` während bzw. kurz nach dem
+   Auftreten mitschneiden (idealerweise gefiltert auf `flutter` und
+   `AndroidRuntime`) - ein tatsächlicher nativer Absturz würde sich dort
+   als Stacktrace zeigen und die genaue Ursache eindeutig bestätigen,
+   was mir eine gezieltere Korrektur ermöglichen würde.
+
+**Betroffene Dateien:**
+- `lib/ui/widgets/profile_chart.dart` (30.1)
+- `lib/services/barometer_altitude_service.dart` (30.2)
+- `lib/util/track_profile_calculator.dart` (30.2)
+- `lib/ui/track_page.dart` (30.3, 30.4)
+- `lib/services/track_recording_service.dart` (30.4)
+
+## 31. Diagnose-Protokoll (Logcat) exportierbar - nur in Debug-/Test-Builds
+
+**Hintergrund:** Zur weiteren Fehlersuche bei dem in Abschnitt 30.4
+beschriebenen, noch nicht abschließend geklärten Problem (verlorene
+Aufzeichnungen) wird jetzt fortlaufend ein technisches Diagnose-Protokoll
+mitgeschrieben, das sich direkt vom Gerät aus exportieren und
+weitergeben lässt - ohne dafür einen Rechner mit `adb` zur Hand haben zu
+müssen (relevant, da das beschriebene Problem typischerweise unterwegs,
+nicht am Schreibtisch auftritt).
+
+**Native Umsetzung (`OnTourApplication.kt`, `startLogcatCapture`):**
+Startet `logcat -v threadtime` als Kindprozess und schreibt dessen
+Ausgabe fortlaufend in eine Datei im app-eigenen internen Speicher
+(`ontour_diagnose.log`). Apps dürfen seit Android 4.1 ohne besondere
+Berechtigung ihre EIGENEN Logcat-Zeilen lesen (nur das Mitlesen fremder
+Apps ist gesperrt) - für die Diagnose eines Fehlers innerhalb des
+eigenen Prozesses genau richtig, ohne zusätzliche Berechtigung in der
+`AndroidManifest.xml`. Die Datei wird bei jedem Prozessstart neu
+begonnen und bei Überschreiten von 5 MB verworfen und neu begonnen
+(verhindert unbegrenztes Wachstum bei sehr langen Testsitzungen, z. B.
+mehrstündigen Wanderungen).
+
+**WICHTIG - NUR in Debug-/Test-Builds aktiv:** Die Aufzeichnung startet
+ausschließlich, wenn das von Android selbst gesetzte "debuggable"-Flag
+der APK aktiv ist (`ApplicationInfo.FLAG_DEBUGGABLE`, wahr für
+`flutter run`/eine Debug-APK, falsch für einen signierten Release-Build)
+- in einem für den Play Store bestimmten Release-Build läuft sie
+automatisch NICHT, ohne dass dafür manuell etwas umgestellt werden
+müsste. Grund: Die Log-Zeilen enthalten zwangsläufig auch GPS-Positionen
+und andere technische Daten - eine dauerhaft aktive Protokollierung
+wäre für echte Nutzer weder nötig noch angemessen.
+
+**Fehlerkorrektur:** Ursprünglich stattdessen per `BuildConfig.DEBUG`
+geprüft - das erfordert aber `buildFeatures { buildConfig = true }` in
+der app-eigenen `build.gradle`, was seit neueren Android-Gradle-Plugin-
+Versionen nicht mehr automatisch aktiviert ist und ohne diese
+zusätzliche, manuelle Gradle-Anpassung zu einem Kompilierfehler
+("Unresolved reference 'BuildConfig'") führte. `ApplicationInfo.FLAG_DEBUGGABLE`
+liefert dasselbe Ergebnis, ganz ohne zusätzliche Gradle-Konfiguration.
+
+**Export (`lib/services/diagnostic_log_service.dart`, NEU):** Kotlins
+`filesDir` entspricht unter Android exakt dem, was Flutters
+`getApplicationDocumentsDirectory()` liefert - beide Seiten berechnen
+unabhängig voneinander denselben Dateipfad, ein zusätzlicher
+MethodChannel dafür ist nicht nötig. Auf der Info-Seite (`info_page.dart`)
+erscheint - NUR sichtbar, wenn tatsächlich eine nicht-leere Log-Datei
+existiert (praktisch also nur in Debug-Builds) - ein Button "Diagnose-
+Protokoll exportieren", der die Datei über den nativen "Teilen"-Dialog
+anbietet (`share_plus`, analog zum bestehenden GPX-Export, siehe
+Abschnitt 20), inklusive eines kurzen Datenschutzhinweises direkt über
+dem Button.
+
+**Betroffene/neue Dateien:**
+- `native_android/de/clausjbauer/ontour/OnTourApplication.kt`
+  (`startLogcatCapture`)
+- `lib/services/diagnostic_log_service.dart` (NEU)
+- `lib/ui/info_page.dart` (Export-Button samt Hinweistext)
+
+## 32. KRITISCHE Fehlerkorrektur: App-Absturz beim Start auf echtem Gerät (Logcat-Aufzeichnung)
+
+**Symptom:** Nach Installation eines Debug-Builds mit der in Abschnitt
+31 beschriebenen Logcat-Aufzeichnung auf einem echten Gerät (Samsung
+S23 Ultra) ließ sich die App überhaupt nicht mehr öffnen - sie stürzte
+unmittelbar beim Start ab (im Emulator dagegen unauffällig).
+
+**Ursache:** In `OnTourApplication.startLogcatCapture()` liefen das
+Löschen der alten Log-Datei UND der eigentliche
+`ProcessBuilder("logcat", ...).start()`-Aufruf noch SYNCHRON auf dem
+aufrufenden Thread - der bei einem Aufruf aus `onCreate()` heraus der
+HAUPT-THREAD ist, und das ganz am Anfang des App-Starts, noch bevor
+Flutter/die UI überhaupt initialisiert sind. Ein echtes Gerät setzt
+SELinux-Beschränkungen für Apps deutlich strenger durch als der
+Emulator - das Starten eines Systemprogramms wie `logcat` direkt aus der
+App heraus wurde dort offenbar nicht sauber mit einer regulären, vom
+umgebenden `try/catch` auffangbaren Exception quittiert, sondern führte
+zu einem Absturz des gesamten Prozesses, noch bevor überhaupt etwas
+sichtbar wurde - für den Nutzer nicht von einem regulären App-Absturz zu
+unterscheiden.
+
+**Korrektur:** Ausnahmslos ALLES (Datei-Löschung, Prozessstart,
+Lese-Schleife) läuft jetzt in einem eigenen Hintergrund-Thread, der als
+Allererstes gestartet wird - der Haupt-Thread bzw. der App-Start selbst
+führt dadurch überhaupt keinen mit `logcat` zusammenhängenden Code mehr
+synchron aus. Zusätzlich wird jetzt `Throwable` statt nur `Exception`
+abgefangen, um auch Fehlerarten abzudecken, die kein regulärer
+`Exception`-Typ sind.
+
+**Falls der Absturz dennoch weiterhin auftritt:** Das würde bedeuten,
+dass die eigentliche Ursache doch nicht (nur) bei der Logcat-
+Aufzeichnung liegt - dann sollte die Funktion versuchsweise komplett
+deaktiviert werden (Aufruf von `startLogcatCapture()` in `onCreate()`
+auskommentieren), um App-Start und Diagnose-Funktion vollständig
+voneinander zu entkoppeln. Ein `adb logcat`-Mitschnitt von einem PC aus
+(sofern verfügbar) würde in diesem Fall - ironischerweise - die
+zuverlässigste Diagnosemethode bleiben, da er unabhängig davon
+funktioniert, ob die App selbst überhaupt startet.
+
+**Betroffene Dateien:**
+- `native_android/de/clausjbauer/ontour/OnTourApplication.kt`
+
+## 33. Logcat-Aufzeichnung vollständig verworfen
+
+**Bestätigt:** Auch nach der in Abschnitt 32 beschriebenen Korrektur
+(alles in einen Hintergrund-Thread verlagert, `Throwable` statt nur
+`Exception` abgefangen) trat exakt derselbe sofortige Absturz beim
+App-Start auf dem Samsung S23 Ultra weiterhin auf. Das zeigt: Nicht die
+Threading-Situation war das eigentliche Problem, sondern der bloße
+VERSUCH, `logcat` als Kindprozess zu starten, führt auf diesem Gerät zu
+einem Fehler, der unterhalb der Java-Exception-Ebene liegt und sich
+grundsätzlich nicht per `try`/`catch` abfangen lässt (vermutlich eine
+harte SELinux-Verweigerung, die den Prozess direkt beendet, statt dem
+aufrufenden Code eine reguläre Fehlerauskunft zu liefern).
+
+**Konsequenz:** Der komplette, auf einem nativen `logcat`-Kindprozess
+basierende Ansatz aus Abschnitt 31/32 wurde ERSATZLOS aus
+`OnTourApplication.kt` entfernt (Methode `startLogcatCapture`, die
+zugehörigen Konstanten sowie der Aufruf in `onCreate`). Priorität hat
+eindeutig eine funktionierende App gegenüber einer Diagnose-Funktion,
+egal wie nützlich Letztere gewesen wäre.
+
+**Betroffene Dateien:**
+- `native_android/de/clausjbauer/ontour/OnTourApplication.kt`
+
+## 34. Neuer, sicherer Ersatz: rein Dart-seitiges Diagnose-Protokoll
+
+**Ersetzt Abschnitt 31 vollständig.** Statt Logcat-Ausgaben über einen
+nativen Kindprozess mitzuschneiden, protokolliert die App jetzt gezielt
+selbst die für die Fehlersuche (Abschnitt 30.4) relevanten Ereignisse -
+über ganz normale Dart-Datei-Schreibvorgänge (`dart:io`), OHNE jeden
+nativen Prozessaufruf und damit ohne das in Abschnitt 33 beschriebene
+Risiko.
+
+**`lib/services/diagnostic_log_service.dart` (NEU, ersetzt die
+gleichnamige Datei aus Abschnitt 31):** Einfaches Singleton
+(`DiagnosticLogService.instance`) mit einer `log(String message)`-
+Methode, die Zeitstempel plus Text an eine Textdatei
+(`ontour_diagnose.log`, wie zuvor im app-eigenen Dokumentenverzeichnis)
+anhängt - bei jedem App-(Prozess-)Start neu begonnen, ab 2 MB verworfen
+und neu begonnen. Bewusst "fire and forget" (nie awaited): Ein
+Fehlschlag beim Schreiben darf niemals die eigentliche Funktion der App
+beeinträchtigen.
+
+**EINSCHRÄNKUNG (bewusst in Kauf genommen):** Ein ECHTER nativer Absturz
+(z. B. ein Kotlin-seitiger Fehler innerhalb des geolocator-Plugins)
+würde WEITERHIN nicht hier erfasst, da der Dart-Isolate in diesem Fall
+selbst nicht mehr weiterläuft, um den Absturz noch protokollieren zu
+können - dafür bliebe weiterhin nur ein per PC angeschlossenes
+`adb logcat`. Erfasst werden aber alle Dart-seitig sichtbaren
+Ereignisse - das deckt den WAHRSCHEINLICHEREN Fall aus Abschnitt 30.4
+(Aufzeichnung "friert" unbemerkt ein, OHNE dass die App komplett
+abstürzt) bereits gut ab, und liefert im Fall eines echten Absturzes
+zumindest die letzten Ereignisse VOR dem Absturz (z. B. ob kurz zuvor
+noch ein Checkpoint erfolgreich gesichert wurde).
+
+**Protokollierte Ereignisse:**
+
+| Ereignis | Wo |
+|---|---|
+| Aufzeichnung gestartet | `TrackRecordingService.start` |
+| Pausiert (automatisch/manuell), Punktezahl | `_pauseInternal` |
+| Fortgesetzt (automatisch/manuell) | `resume` |
+| Beendet (Name, Punktezahl, Distanz) | `stop` |
+| Verworfen (Punktezahl) | `discard` |
+| Stream-Fehler samt Neustart-Versuch (siehe Abschnitt 30.4) | `_handleStreamError` |
+| Checkpoint gesichert (Punktezahl) - "Herzschlag"-Nachweis | `_maybeSaveCheckpoint` |
+| App-Lebenszyklus-Wechsel (nur während einer laufenden Aufzeichnung) | `HomeShell.didChangeAppLifecycleState` |
+| App-Prozess gestartet | `HomeShell.initState` |
+
+Der letzte Eintrag ist besonders aufschlussreich für die Fehlersuche:
+`HomeShell.initState` läuft dank der persistenten FlutterEngine
+(Abschnitt 21) NUR EINMAL pro tatsächlichem Android-Prozess, nicht bei
+jedem Wiederöffnen nach einem Wischen. Taucht dieser Eintrag im
+Protokoll ÖFTER auf, als aufgrund der tatsächlichen Nutzung zu erwarten
+wäre, ist das ein direkter Beleg dafür, dass der Prozess zwischenzeitlich
+tatsächlich neu gestartet wurde - genau die Frage, die in Abschnitt 30.4
+noch offen war.
+
+**Fehlerkorrektur:** `info_page.dart` erzeugte zunächst noch per
+`DiagnosticLogService()` eine eigene Instanz - seit der Umstellung auf
+ein Singleton (`DiagnosticLogService.instance`, siehe oben) hat die
+Klasse aber nur noch einen privaten Konstruktor, was zu einem
+Kompilierfehler führte ("doesn't have an unnamed constructor"). Auf
+`DiagnosticLogService.instance` korrigiert.
+
+**Export:** Unverändert über die Info-Seite (`info_page.dart`,
+"Diagnose-Protokoll exportieren", nur sichtbar bei vorhandener,
+nicht-leerer Datei) - die API von `DiagnosticLogService` (`hasLog()`,
+`shareLog()`) blieb bewusst identisch zur vorherigen, verworfenen
+Fassung, `info_page.dart` musste dafür inhaltlich nicht geändert werden.
+
+**Betroffene/neue Dateien:**
+- `lib/services/diagnostic_log_service.dart` (NEU, ersetzt Abschnitt 31)
+- `lib/services/track_recording_service.dart` (Log-Aufrufe an den
+  genannten Stellen)
+- `lib/ui/home_shell.dart` (Log-Aufrufe für App-Start und
+  Lebenszyklus-Wechsel)
+
+## 35. Diagnose-Protokoll auf Nicht-Release-Builds beschränkt
+
+**Lücke entdeckt bei der Frage, ob Build 28 auch über einen internen
+Play-Store-Test funktioniert:** Beim vollständigen Entfernen der
+nativen Logcat-Variante (Abschnitt 33) und der Umstellung auf den rein
+Dart-seitigen Logger (Abschnitt 34) wurde die ursprünglich für die
+native Variante vorgesehene Beschränkung auf Test-Builds NICHT auf den
+neuen Ersatz übertragen - `DiagnosticLogService.log()` hätte dadurch
+auch in einem für den Play Store bestimmten Release-Build (ein interner
+Test lädt technisch einen ganz normalen, signierten Release-Build hoch)
+bei jedem echten Nutzer unbemerkt mitgeschrieben.
+
+**Korrektur:** `log()`, `hasLog()` und (zur zusätzlichen Absicherung)
+auch `shareLog()` brechen jetzt sofort ab, wenn `kReleaseMode` (aus
+`package:flutter/foundation.dart`) wahr ist - eine von Flutter selbst
+zur Kompilierzeit gesetzte Konstante, die für `flutter build
+appbundle`/`flutter build apk --release` `true` ergibt, für `flutter
+run` sowie Debug-/Profile-Builds `false`. Damit ist die ursprünglich
+verfolgte Absicht (Diagnose ausschließlich in Test-Builds) wieder
+hergestellt - diesmal rein Dart-seitig, ganz ohne Gradle-Konfiguration
+oder native Beteiligung.
+
+**Betroffene Dateien:**
+- `lib/services/diagnostic_log_service.dart`
+
+## 36. Fehlende Benachrichtigungs-Berechtigung: kein sichtbarer Hintergrund-Task
+
+**Beobachtung nach dem Neuaufsetzen (Deinstallation der Play-Store-
+Version, Installation eines frischen Debug-Builds):** Eine Aufzeichnung
+ließ sich zwar starten, aber es erschien zu keinem Zeitpunkt ein
+sichtbarer Hintergrund-Task (die vom Foreground-Service erwartete
+Benachrichtigung "onTour zeichnet auf", siehe Abschnitt 19) - UND das
+Diagnose-Protokoll (Abschnitt 34) enthielt nicht einmal den allerersten,
+eigentlich unbedingt geschriebenen Eintrag "Aufzeichnung gestartet".
+
+**Ursache:** Die App fragte bislang AUSSCHLIESSLICH die Standort-
+Berechtigung aktiv zur Laufzeit ab (`Geolocator.requestPermission()`,
+siehe Abschnitt 2). `POST_NOTIFICATIONS` (ab Android 13/API 33 eine
+gewöhnliche Laufzeit-Berechtigung wie jede andere) war zwar bereits seit
+Abschnitt 2 in der `AndroidManifest.xml` EINGETRAGEN - das allein reicht
+seit Android 13 aber nicht mehr aus, um Benachrichtigungen tatsächlich
+anzeigen zu dürfen; es braucht zusätzlich eine explizite
+Laufzeit-Abfrage, die bislang fehlte. Nach einer Neuinstallation
+(Berechtigungen werden dabei vollständig zurückgesetzt) war
+`POST_NOTIFICATIONS` deshalb nicht erteilt.
+
+Das erklärt BEIDE Beobachtungen zusammen: Ohne die Berechtigung kann
+`geolocator` keine sichtbare Foreground-Service-Benachrichtigung zeigen
+- UND das Fehlen führte vermutlich sogar zu einem SYNCHRONEN Fehler
+direkt beim Aufruf von `Geolocator.getPositionStream(...)` mit gesetztem
+`foregroundNotificationConfig`. Da `TrackRecordingService.start()`
+bislang KEIN eigenes `try`/`catch` um `_startListening()` hatte (im
+Unterschied zu den bereits in Abschnitt 30.4 behandelten ASYNCHRONEN
+Stream-Fehlern, die über `onError` abgefangen werden), verhinderte ein
+solcher synchroner Fehler auch den danach folgenden, eigentlich
+unbedingten Diagnose-Log-Eintrag - der Zustand (`state`) blieb dabei
+äußerlich auf `recording` stehen, obwohl nie ein einziger GPS-Punkt
+einging.
+
+**Zwei Korrekturen:**
+
+1. **Neue Abhängigkeit `permission_handler`** (`^12.0.1`) - fragt
+   `Permission.notification` jetzt aktiv beim Öffnen der Track-Seite ab
+   (`TrackPage._initialize`, direkt im Anschluss an die bereits
+   bestehende Standort-Berechtigungsprüfung), noch bevor der Nutzer
+   überhaupt auf "Aufzeichnung starten" tippt - beide
+   Berechtigungsdialoge (Standort, Benachrichtigung) erscheinen dadurch
+   im selben Arbeitsschritt, statt den Nutzer beim eigentlichen Start
+   zusätzlich zu unterbrechen. Ein Ablehnen wird bewusst NICHT
+   blockierend behandelt (kein eigener Hinweisbildschirm wie bei der
+   Standort-Berechtigung) - die Aufzeichnung funktioniert technisch auch
+   ohne sichtbare Benachrichtigung weiter, nur eben ohne die in
+   Abschnitt 19 beschriebenen Vorteile für den Hintergrundbetrieb.
+   `permission_handler` wurde bewusst einer selbst gebauten,
+   MethodChannel-basierten Lösung vorgezogen - das Paket übernimmt
+   korrekt die Zuordnung zur jeweils AKTUELLEN Activity trotz der
+   persistenten FlutterEngine (Abschnitt 21), was ein selbst gebauter
+   Ansatz deutlich fehleranfälliger gemacht hätte.
+2. **`TrackRecordingService.start()`:** Der Diagnose-Log-Eintrag
+   "Aufzeichnung gestartet" steht jetzt GANZ AM ANFANG der Methode
+   (statt erst nach `_startListening()`) und `_startListening()` selbst
+   ist jetzt zusätzlich gegen SYNCHRONE Fehler abgesichert (`try`/
+   `catch`, der Fehler wird dabei an dieselbe Logik wie asynchrone
+   Stream-Fehler übergeben, siehe `_handleStreamError`/Abschnitt 30.4) -
+   ein Fehler beim Start kann dadurch nie wieder unbemerkt den
+   Diagnose-Log-Eintrag verhindern, UND ein automatischer Neustart-
+   Versuch greift jetzt auch für diesen Fehlerfall.
+
+**Falls `compileSdkVersion` beim Bauen bemängelt wird:** `permission_handler`
+12.x setzt `compileSdkVersion 35` voraus - falls Gradle deswegen einen
+Fehler meldet, in `android/app/build.gradle` (bzw. `build.gradle.kts`)
+`compileSdk`/`compileSdkVersion` entsprechend auf mindestens 35 anheben.
+
+**Betroffene Dateien:**
+- `pubspec.yaml` (neue Abhängigkeit `permission_handler`)
+- `lib/ui/track_page.dart` (Berechtigungsabfrage)
+- `lib/services/track_recording_service.dart` (Log-Reihenfolge,
+  Absicherung gegen synchrone Fehler)
+
+## 37. Genauigkeits-Anzeige und Mess-Impuls auf Tacho-, Kompass- und Track-Seite
+
+**Umsetzung (auf Wunsch):** Zwei neue, wiederverwendbare Anzeige-
+Elemente, jetzt auf allen drei Sensor-Seiten sichtbar (bewusst NICHT auf
+der Einstellungsseite, dort ergibt ein "aktuell verwendet"-Hinweis ohne
+laufende Messung keinen Sinn):
+
+1. **`AccuracyBadge`** (`widgets/accuracy_badge.dart`, NEU) - kleines,
+   farbiges Badge mit der aktuell verwendeten Genauigkeitsstufe
+   (Akkusparend/Ausgewogen/Maximale Genauigkeit), Farbe fest zugeordnet
+   (gelb/blau/grün, siehe `SpeedAccuracyMode.color`) und unabhängig vom
+   Anzeigemodus (Hell/Dunkel) immer gleich erkennbar.
+2. **`MeasurementPulseIndicator`** (`widgets/measurement_pulse_indicator.dart`,
+   NEU) - blitzt kurz auf (schnelles Ein-, langsameres Ausblenden über
+   700 ms), sobald sich ein von außen übergebener Zähler ändert. Kennt
+   selbst keine fachliche Bedeutung von "Messung" - der jeweilige
+   Aufrufer erhöht den Zähler bei genau dem Ereignis, das auf seiner
+   Seite eine neue Messung darstellt.
+
+**WICHTIG - ehrliche statt einheitlich erfundener Anzeige:** Die
+Genauigkeitsstufe (`SpeedAccuracyMode`) ist bislang AUSSCHLIESSLICH auf
+der Tacho-Seite über die Einstellungen wählbar (siehe Abschnitt 4) -
+Kompass- und Track-Seite verwenden jeweils eine eigene, FEST
+einprogrammierte Genauigkeit (`AltitudeService`: `LocationAccuracy.medium`,
+siehe Abschnitt 10; `TrackRecordingService`: `LocationAccuracy.best`,
+siehe Abschnitt 19), unabhängig von dieser Einstellung. Statt auf allen
+drei Seiten unterschiedslos denselben (auf Kompass/Track schlicht
+FALSCHEN) Einstellungswert anzuzeigen, zeigt jede Seite deshalb, was
+dort TATSÄCHLICH verwendet wird:
+
+| Seite | Woher die angezeigte Stufe stammt |
+|---|---|
+| Tacho | `AppPreferences.speedAccuracyMode` (echte Einstellung) |
+| Kompass | `AltitudeService.fixedAccuracy` (fest: Akkusparend-Stufe) |
+| Track | `TrackRecordingService.fixedAccuracy` (fest: Maximal-Stufe) |
+
+Neue statische Methode `SpeedAccuracyMode.fromLocationAccuracy(...)`
+bildet dafür eine beliebige `LocationAccuracy` auf die passende der drei
+Stufen ab (die drei vordefinierten Stufen dieser App verwenden ohnehin
+jeweils exakt eine von genau drei unterschiedlichen `LocationAccuracy`-
+Werten, die Zuordnung ist damit eindeutig). `AltitudeService.fixedAccuracy`
+bzw. `TrackRecordingService.fixedAccuracy` wurden dafür jeweils als
+öffentliche Konstante freigelegt, statt die verwendete Genauigkeit ein
+zweites Mal (und damit potenziell abweichend) im UI-Code zu
+duplizieren.
+
+**Auslöser des Mess-Impulses je Seite:**
+
+| Seite | Auslöser |
+|---|---|
+| Tacho | jede neue `SpeedReading` |
+| Kompass | jede neue `AltitudeReading` (GPS ODER Barometer) - bewusst NICHT bei jedem Magnetkompass-Update, das würde mehrmals pro Sekunde aufblitzen und die Aussagekraft ("wurde eine Standort-Messung durchgeführt") zunichtemachen |
+| Track | jeder neue `TrackPoint` (erkannt über eine gestiegene Punktezahl, da der `updates`-Stream von TrackRecordingService auch aus vielen anderen Gründen feuert, z. B. Pause/Fortsetzen) |
+
+**Platzierung:** Tacho- und Kompass-Seite zeigen die Zeile oberhalb des
+bisherigen Seiteninhalts. Track-Seite zeigt sie oberhalb der in
+Abschnitt 29 eingeführten Unterreiter "Karte"/"Details" (statt innerhalb
+nur eines der beiden Tabs), damit sie unabhängig vom gerade gewählten
+Unterreiter sichtbar bleibt - passend zur ebenfalls dort bereits
+etablierten Platzierung der Start-/Pause-/Beenden-Steuerung.
+
+**Betroffene/neue Dateien:**
+- `lib/models/speed_accuracy_mode.dart` (Farbe, `fromLocationAccuracy`)
+- `lib/ui/widgets/accuracy_badge.dart` (NEU)
+- `lib/ui/widgets/measurement_pulse_indicator.dart` (NEU)
+- `lib/services/altitude_service.dart` (`fixedAccuracy` freigelegt)
+- `lib/services/track_recording_service.dart` (`fixedAccuracy` freigelegt)
+- `lib/ui/speed_page.dart`
+- `lib/ui/compass_page.dart`
+- `lib/ui/track_page.dart`
+
+## 38. Vermuteter Zusammenhang: Foreground-Service startet nach schnellem Beenden/Neustarten manchmal nicht
+
+**Beobachtung:** Der sichtbare Hintergrund-Task (Foreground-Service-
+Benachrichtigung "onTour zeichnet auf") startet zuverlässig mit der
+ersten Aufzeichnung und endet zuverlässig mit deren Beenden. Wird jedoch
+UNMITTELBAR danach eine NEUE Aufzeichnung gestartet, blieb er manchmal -
+unter für den Nutzer nicht erkennbaren Umständen und OHNE jede
+Fehlermeldung - aus. Spätere Wiederholungen desselben Ablaufs
+funktionierten teils wieder normal.
+
+**Recherche-Ergebnis (keine abschließend bewiesene, aber gut
+begründete Diagnose):** In den GitHub-Diskussionen des geolocator-
+Projekts selbst findet sich eine Entwickler-Aussage, die zu genau diesem
+Muster passt: Das Plugin führt intern Buch darüber, ob "noch eine
+FlutterEngine verbunden ist", bevor es den nativen Standort-Service
+tatsächlich stoppt (sinngemäß: "There is still another flutter engine
+connected, not stopping location service"). Unsere bewusst PERSISTENTE
+FlutterEngine (Abschnitt 21) - die bei jedem App-Öffnen erneut an eine
+NEUE Activity-Instanz angehängt wird, statt (wie vom Plugin
+offensichtlich angenommen) exakt eine Engine pro Activity-Lebenszyklus
+zu sein - passt zu genau der Konstellation, in der diese interne
+Buchführung durcheinandergeraten könnte: Der vorherige Foreground-
+Service wäre dann beim sofortigen Start einer neuen Aufzeichnung noch
+nicht vollständig abgebaut, wodurch der neue Start-Versuch vom Plugin
+stillschweigend ignoriert werden könnte - ohne dass dabei eine
+abfangbare Exception anfällt (weshalb weder die in Abschnitt 30.4/36
+ergänzte Fehlerbehandlung noch das Diagnose-Protokoll aus Abschnitt 34
+das bislang sichtbar gemacht haben).
+
+**WICHTIG - Einschränkung dieser Diagnose:** Ohne Einsicht in den
+tatsächlich installierten geolocator-Kotlin-Quellcode bzw. einen
+Stacktrace lässt sich das nicht abschließend beweisen - es handelt sich
+um eine gut begründete, auf dokumentiertem Plugin-Verhalten basierende
+Vermutung, keine bestätigte Ursache.
+
+**Pragmatische Gegenmaßnahme:** `TrackRecordingService.start()` ist jetzt
+`async` (vorher `void`) und wartet - falls die VORHERIGE Aufzeichnung
+erst vor weniger als 800 ms beendet wurde (`_minRestartGap`) - die
+verbleibende Zeit ab, BEVOR der eigentliche Positions-Stream
+(re-)gestartet wird. Das gibt dem geolocator-Plugin etwas Zeit, den
+Abbau des vorherigen Foreground-Service abzuschließen, bevor ein neuer
+angefordert wird - eine in der Praxis übliche Gegenmaßnahme für genau
+diese Art von Race Condition, auch wenn die genaue interne Ursache im
+Plugin nicht einsehbar ist.
+
+**Zusätzlich zur besseren Diagnose beim nächsten Auftreten:** Sowohl der
+Beginn einer eventuellen Wartezeit als auch deren Dauer werden jetzt im
+Diagnose-Protokoll (Abschnitt 34) vermerkt. Sollte das Problem trotz
+dieser Wartezeit erneut auftreten, hilft ein Blick in das exportierte
+Protokoll (Info-Seite) zu klären, ob zwischenzeitlich weiterhin
+"Checkpoint gesichert"-Einträge erscheinen (dann liefe die eigentliche
+GPS-Erfassung technisch weiter, nur die BENACHRICHTIGUNG bliebe aus)
+oder ob nach dem Start gar keine weiteren Einträge mehr folgen (dann
+wäre der komplette Stream betroffen, nicht nur die Benachrichtigung) -
+das würde die obige Diagnose weiter eingrenzen.
+
+**Betroffene Dateien:**
+- `lib/services/track_recording_service.dart` (`start()` jetzt async,
+  `_minRestartGap`, `_lastStoppedAt`)
+- `lib/ui/track_page.dart` (`_handleStart` awaited jetzt `start()`)
+
+## 39. Pause-Erinnerung: Zählrad in Minuten (ersetzt Dropdown aus Abschnitt 22/26)
+
+Die Wartezeit der Pause-Erinnerung (Einstellungen → Erweitert) wird jetzt
+über ein Zählrad (`CupertinoPicker`) in Minuten gewählt: **0 = Erinnerung
+aus**, Bereich 0-120 Minuten, **Standard 3 Minuten**. Gespeichert wird eine
+einfache Zahl (`AppPreferences.autoPauseReminderMinutes`, Schlüssel
+`autoPauseReminderMinutes`); das Enum `AutoPauseReminderOption` samt
+`models/auto_pause_reminder_option.dart` entfällt. Der zuvor unter dem
+alten Schlüssel gespeicherte Wert wird nicht übernommen - es gilt wieder
+der neue Standard. `TrackRecordingService.updateReminderOption` heißt jetzt
+`updateReminderMinutes(int)`.
+
+Betroffene Dateien: `app_preferences.dart`, `track_recording_service.dart`,
+`track_page.dart`, `settings_page.dart`.
+
+## 40. Stillstandserkennung der Track-Aufzeichnung (Fehlerkorrektur)
+
+**Problem:** Während der Fahrt wurde die Aufzeichnung fälschlich
+automatisch pausiert. Ursache: Die automatische Pause stützte sich allein
+auf den Beschleunigungssensor (`MotionService`), der bei ruhiger,
+gleichmäßiger Fahrt nahe 0 misst. Die Tacho-Seite war davon nicht
+betroffen, weil sie zusätzlich die GPS-Geschwindigkeit (< 8 km/h) prüft.
+
+**Pausieren:** Nur noch, wenn der Bewegungssensor Stillstand meldet UND
+GPS ihn bestätigt (letzte GPS-Geschwindigkeit < 8 km/h, oder seit über 5 s
+kein GPS-Punkt - bei `distanceFilter: 3` kommen bei Bewegung laufend Punkte).
+
+**Fortsetzen:** Eine automatische Pause wird aufgehoben, wenn der
+Bewegungssensor Bewegung meldet ODER die GPS-Geschwindigkeit ≥ 8 km/h
+beträgt. Dafür läuft der GPS-Stream während einer AUTOMATISCHEN Pause
+weiter (nur zur Bewegungserkennung, es werden keine Punkte gespeichert);
+bei einer MANUELLEN Pause wird er wie bisher beendet. Nebenwirkung: Die
+Foreground-Benachrichtigung bleibt bei einer automatischen Pause sichtbar,
+der Akkuverbrauch ist dabei etwas höher. Tippt der Nutzer während einer
+automatischen Pause auf "Pause", wird sie manuell und der Stream beendet.
+
+Betroffene Datei: `track_recording_service.dart`.
+
+## 41. Kursangaben: Kompass-Seite vs. Track-Seite
+
+Beide Werte messen Unterschiedliches:
+- **Kompass-Seite:** Ausrichtung des Geräts (Magnetfeldsensor). Seit dieser
+  Änderung auf **geografisch Nord** korrigiert: `CompassService` addiert die
+  Missweisung, die nativ über `GeomagneticField` (MethodChannel
+  `ontour/geomagnetic`, registriert in `OnTourApplication`) für den
+  aktuellen Standort ermittelt wird (neu bei Ortsänderung > ca. 0,25°).
+  Ohne Standort bleibt es beim magnetischen Wert.
+- **Track-Seite:** "Kurs über Grund" (GPS, Bewegungsrichtung). Wird unter
+  1 m/s, bei Pause, ohne Aufzeichnung oder bei einem Wert älter als 5 s
+  als "-" angezeigt.
+
+Betroffene Dateien: `compass_service.dart`, `compass_page.dart`,
+`track_recording_service.dart`, `track_page.dart`,
+`native_android/.../OnTourApplication.kt`.
+
+## 42. Profil-Diagramme: y-Achsen-Beschriftung sichtbar
+
+Der Ankerpunkt der rechtsbündigen y-Beschriftung liegt jetzt am rechten
+Rand des Beschriftungsbereichs (`_yAxisLabelWidth - 6`), der Bereich ist
+von 56 auf 80 px verbreitert (`profile_chart.dart`).
+
+## 43. Hinweis: Logcat-Rest in OnTourApplication.kt entfernt
+
+Die in Abschnitt 33 beschlossene vollständige Entfernung der
+Logcat-Aufzeichnung war in der zuletzt vorliegenden `OnTourApplication.kt`
+noch nicht enthalten (`startLogcatCapture` samt Aufruf). Sie ist jetzt
+entfernt (inkl. der Imports `ApplicationInfo`, `File`, `FileWriter`).
+
+## 44. Ruhigere Höhe und Steigung (überarbeitet, ersetzt die Drosselung aus 30.2)
+
+**Problem:** Die Steigung schwankte auch auf ebener Strecke um ±12 %. Ursache:
+GPS-Höhenrauschen (mehrere Meter) schlug über die Barometer-Kalibrierung
+direkt auf jeden Trackpunkt durch und wurde über kurze Punktabstände zu
+großen Prozentwerten hochgerechnet.
+
+**Maßnahmen:**
+- `BarometerAltitudeService` (komplementärer Filter): Der Referenzpunkt
+  (Druck/Höhe der ersten Kalibrierung) bleibt FEST. Der Luftdruck wird über
+  3 s gemittelt. Der Versatz zwischen Barometer- und GPS-Höhe wird bei jeder
+  GPS-Messung nur LANGSAM nachgeführt (Tiefpass, Zeitkonstante 120 s; am
+  Anfang als laufender Mittelwert der ersten Messungen). Das ersetzt die
+  frühere harte Neu-Kalibrierung (Stufen/Sprünge entfallen); die
+  Minuten-Drosselung ist damit überflüssig. Wetterdrift wird weiterhin
+  ausgeglichen. Die Position (Breite/Länge/Genauigkeit) bleibt bei jedem
+  Aufruf aktuell.
+- `TrackProfileCalculator`: Die Steigung wird nicht mehr aus zwei Einzelpunkten,
+  sondern per linearer Regression über ein rückwärtiges Fenster von 50 m
+  bestimmt (`_gradientWindowMeters`); das Fenster muss mindestens 20 m lang
+  sein (`_minGradientSegmentMeters`), sonst keine Anzeige. Deckel weiterhin
+  ±40 %.
+
+**Grenzen:** Kompass-Seite und Track-Aufzeichnung nutzen weiterhin je eine
+eigene `BarometerAltitudeService`-Instanz - absolute Höhenwerte beider Seiten
+können um einige Meter abweichen. Der erste Trackpunkt verwendet vor der
+ersten Barometer-Messung noch die GPS-Rohhöhe. Ein möglicher Ellipsoid-Versatz
+der GPS-Höhe (Höhe über Ellipsoid statt über NN) ist nicht korrigiert.
+
+## 45. Info-Seite: Button zur Play-Store-Entwicklerseite
+
+Unter dem Autorennamen erscheint ein Button "Meine Apps im Play Store", der
+die Entwicklerseite (Liste aller Apps) im Play Store öffnet
+(`InfoPage._playStoreDeveloperUrl`, Paket `url_launcher`, extern geöffnet).
+Solange die Konstante leer ist, wird der Button nicht angezeigt.
+`AndroidManifest.xml` enthält dafür in `<queries>` einen `VIEW`-Intent für
+`https` (Paketsichtbarkeit ab Android 11). Nach dem Eintragen/Hinzufügen
+des Pakets `flutter pub get` ausführen.
+
+## 46. Kompass: Gyro-Fusion und Störungswarnung
+
+`CompassService` fusioniert den absoluten Magnetkurs (`flutter_compass`,
+bereits um die Deklination auf geografisch Nord korrigiert, siehe
+Abschnitt 41) mit der Drehrate des Gyroskops (`sensors_plus`) als
+Complementary Filter (Zeitkonstante 1,5 s). Die Drehrate wird auf die per
+Beschleunigungssensor (Tiefpass) ermittelte Lotrichtung projiziert und ist
+dadurch unabhängig von der Geräteneigung. Die Anzeige wird ruhiger, folgt
+Drehungen aber sofort.
+
+**Störungserkennung:** Die Magnetfeldstärke (µT, Magnetometer) gilt als
+gestört, wenn sie außerhalb von 20-75 µT liegt oder um mehr als 30 % von
+einer langsam mitlaufenden Basis abweicht (Basis wird nur im ungestörten
+Zustand nachgeführt). Zustandswechsel sind entprellt (1 s hinein, 2 s
+hinaus, analog `MotionService`). Bei Störung wird die Korrektur zum
+Magnetkurs ausgesetzt, der Kurs läuft nur auf dem Gyro weiter. Weicht der
+Magnetkurs bei ungestörtem Feld länger als 8 s um mehr als 30° ab, obwohl
+das Gerät fast still gehalten wird (< 10 °/s), wird neu synchronisiert
+(Gyro-Drift). Ohne Gyroskop wird der Magnetkurs wie bisher durchgereicht,
+ohne Magnetometer entfällt die Störungswarnung.
+
+**Anzeige:** `CompassPage` zeigt in der Statuszeile (feste Höhe, kein
+Layout-Sprung) den Chip "Kompass gestört"; Antippen öffnet seit Abschnitt 48
+die geführte Kalibrierung (zuvor ein reiner Hinweisdialog). Die
+Kurs-Genauigkeitszeile zeigt dann "Genauigkeit: gestört".
+
+**Hinweise:** Alle Schwellenwerte sind empirische Startwerte und auf dem
+Gerät zu verifizieren. `CompassPage.dispose()` gibt den Service jetzt frei
+(mehrere Sensor-Subscriptions). Das Gyroskop läuft nur, solange die
+Kompass-Seite sichtbar ist.
+
+**Betroffene Dateien:**
+- `lib/models/compass_reading.dart` (neue Felder `isDisturbed`,
+  `fieldStrengthMicroTesla`)
+- `lib/services/compass_service.dart` (Fusion, Störungserkennung,
+  `dispose`)
+- `lib/ui/compass_page.dart` (Chip, Dialog, Genauigkeitszeile, dispose)
+
+## 47. Luftdruck-Anzeige mit 3-Stunden-Trend (Kompass-Seite)
+
+Der Barometer (`sensors_plus`) liefert jetzt zusätzlich zur Höhe den
+Luftdruck samt Tendenz. Ein schneller Druckabfall ist besonders für Segler
+ein wichtiges Warnsignal.
+
+**`services/pressure_trend_service.dart` (NEU):** Lebt - wie
+`TrackRecordingService` - einmalig in `HomeShell` (nicht pro Seitenaufruf),
+da ein Trend den Verlauf über Stunden braucht. Der Druck wird fortlaufend
+gelesen und jeweils über eine Minute gemittelt (eine Probe pro Minute,
+Verlauf max. 4 Stunden). Der Trend ist die Steigung einer Ausgleichsgeraden
+(lineare Regression) über das 3-Stunden-Fenster, hochgerechnet auf hPa pro
+3 Stunden - robuster gegen Rauschen und Lücken als die Differenz zweier
+Werte. Ein Trend erscheint ab 30 Minuten Verlauf (bei weniger als 3 Stunden
+mit dem Hinweis "Basis: X min"). Der Verlauf wird alle 5 Minuten als Datei
+(`ontour_pressure_history.json`, Dokumentenverzeichnis) gesichert und beim
+Start wieder geladen, damit ein App-Neustart den Trend nicht zurücksetzt.
+
+**`models/pressure_reading.dart` (NEU):** `PressureReading` sowie die
+Stufen `PressureTrendCategory` (hPa/3 h): gleichbleibend < 1,0;
+fallend/steigend 1,0-3,5; schnell 3,5-6,0; sehr schnell > 6,0. Die
+Schwelle von 1,0 hPa für "gleichbleibend" berücksichtigt, dass
+Smartphone-Barometer über Stunden um einige Zehntel hPa driften können.
+
+**Anzeige:** Auf der Kompass-Seite unter der Höhe: "Luftdruck: 1009,3 hPa"
+(Schriftgröße wie Kurs/Höhe), darunter der Trend im kleineren Stil
+(z. B. "↘ fallend: -2,1 hPa / 3 h"). Eine Zusatzzeile erscheint nur bei
+Bedarf (kurzer Verlauf bzw. Höhenänderung). Solange kein Wert vorliegt:
+"Luftdruck: nicht verfügbar".
+
+**WICHTIG - Stationsdruck, nicht Meeresspiegeldruck:** Angezeigt wird der am
+Gerät GEMESSENE Druck. Wetterberichte geben den auf Meereshöhe umgerechneten
+Druck an; beide unterscheiden sich pro 100 m Höhe um rund 12 hPa. Auf See
+ist der Unterschied vernachlässigbar, im Binnenland/Gebirge nicht. Eine
+Umrechnung wurde bewusst NICHT eingebaut: Die GPS-Höhe (u. U. Höhe über dem
+Ellipsoid, in Deutschland ca. 45-50 m über NN, siehe Abschnitt 44) würde
+den umgerechneten Wert um mehrere hPa verfälschen.
+
+**Einschränkungen:** (1) Im Hintergrund liefert Android Sensorwerte nicht
+garantiert - der Verlauf kann Lücken haben (die Regression kommt damit
+zurecht). (2) Eine Höhenänderung (ca. 1,2 hPa pro 10 m) lässt sich vom Wetter
+nicht trennen. `CompassPage` meldet ihre Höhenwerte über
+`PressureTrendService.noteAltitude`; ändert sich die Höhe im Fenster um mehr
+als 15 m, erscheint "Höhe geändert - Trend unsicher". Höhen, die nur auf
+anderen Seiten (z. B. Track) bekannt sind, fließen nicht ein. (3) Der Textblock
+der Kompass-Seite hat jetzt zwei bis drei Zeilen mehr; das vorhandene
+`FittedBox` skaliert ihn bei Bedarf etwas kleiner.
+
+**Betroffene/neue Dateien:**
+- `lib/models/pressure_reading.dart` (NEU)
+- `lib/services/pressure_trend_service.dart` (NEU)
+- `lib/ui/home_shell.dart` (hält den Service, startet/beendet ihn, reicht
+  ihn an `CompassPage` durch)
+- `lib/ui/compass_page.dart` (neuer Parameter `pressureService`, Anzeige)
+
+## 48. Geführte Kompass-Kalibrierung
+
+**Motivation:** Bei gestörtem Kompass (Abschnitt 46) gab es nur einen
+Hinweisdialog. Neu: `ui/compass_calibration_page.dart` führt den Nutzer
+durch die Bewegung, die Android für die Selbstkalibrierung des
+Magnetsensors braucht, und zeigt das Ergebnis an.
+
+**WICHTIG - was die Seite NICHT kann:** Android bietet Apps keine
+Möglichkeit, die Magnetsensor-Kalibrierung selbst auszulösen oder
+Kalibrierwerte zu setzen; das System justiert den Sensor eigenständig,
+während das Gerät bewegt wird. Die Seite rechnet deshalb nichts am Sensor
+um, sondern (1) zeigt per Animation die gewünschte Bewegung (liegende
+Acht, `_FigureEightPainter`), (2) misst, wie vollständig das Gerät dabei
+gedreht/gekippt wurde, und (3) bestätigt, sobald das Magnetfeld wieder
+plausibel ist. Eine ÄUSSERE Störung (Karosserie, Magnethalterung, Metall)
+lässt sich so nicht beheben - die Seite weist dann darauf hin.
+
+**Bewegungsabdeckung:** Die Richtung des rohen Magnetfeldvektors im
+Gerätekoordinatensystem wird in 8 x 4 Kacheln (Azimut x Elevation)
+eingeteilt; durchlaufene Kacheln zählen als erfasst. Ab 40 % der Kacheln
+gilt die Bewegung als ausreichend (nicht alle Kacheln sind bei normaler
+Handbewegung erreichbar). Der Fortschrittsbalken zeigt diese Abdeckung.
+
+**Abschluss:** "Fertig" erscheint, sobald genug Bewegung erfasst wurde UND
+der `CompassService` das Feld als ungestört meldet (derselbe, entprellte
+Wert wie der Warn-Chip). Der Zustand bleibt bis "Neu starten" bestehen.
+Bleibt das Feld trotz genug Bewegung gestört, erscheint ein Hinweis auf
+äußere Störquellen.
+
+**Einstieg:** Warn-Chip "Kompass gestört" UND ein dauerhaft sichtbarer
+Button (Icon `threesixty`) in der Statuszeile der Kompass-Seite - die
+Kalibrierung ist auch ohne Störungswarnung erreichbar. Die Seite hört als
+zweiter Listener auf den bereits laufenden `CompassService`-Stream der
+Kompass-Seite (kein zusätzlicher Sensor-Start dort); nur das rohe
+Magnetometer für die Abdeckung wird zusätzlich gelesen.
+
+**Betroffene/neue Dateien:**
+- `lib/ui/compass_calibration_page.dart` (NEU)
+- `lib/ui/compass_page.dart` (Chip und Button öffnen die Seite; der
+  Hinweisdialog aus Abschnitt 46 entfällt)
+
+## 49. Automatische Pause: rein GPS-basierte Stillstandserkennung
+
+**Problem:** Bei laufendem Motor im Leerlauf (Ampel) halten die
+Fahrzeugvibrationen den Beschleunigungssensor dauerhaft auf "Bewegung".
+Die bisherige Pause-Erkennung (Abschnitt 40: Sensor meldet Stillstand UND
+GPS bestätigt) löste dadurch nur bei abgeschaltetem Motor aus. Umgekehrt
+hätte der Sensor eine Pause sofort wieder aufgehoben.
+
+**Neu (`TrackRecordingService`):**
+- **Pausieren per GPS allein:** Ein sekündlicher Timer (`_checkGpsStandstill`)
+  prüft, ob die letzte GPS-Geschwindigkeit unter 0,5 m/s (1,8 km/h) liegt
+  oder seit 5 s kein neuer Punkt eintraf (bei `distanceFilter: 3` kommen im
+  Stand keine Punkte). Hält das 8 s ununterbrochen an, wird automatisch
+  pausiert. Die Schonfrist nach manuellem Fortsetzen (10 s) gilt weiter. Der
+  bisherige Pfad (Sensor meldet Stillstand + GPS bestätigt) bleibt als
+  schnellerer Weg erhalten (z. B. Motor aus).
+- **Fortsetzen nur per GPS:** Eine automatische Pause wird NICHT mehr durch
+  den Bewegungssensor aufgehoben, sondern erst, wenn zwei aufeinanderfolgende
+  GPS-Messwerte mindestens 1,0 m/s (3,6 km/h) zeigen. Die Schwelle liegt
+  bewusst über der Pausenschwelle (Hysterese); die zwei Bestätigungen
+  fangen einzelne GPS-Ausreißer im Stand ab. Sie ist niedriger als zuvor
+  (8 km/h), damit auch Fußgänger zuverlässig wieder einsteigen.
+
+**Nebenwirkungen:** Ein GPS-Verlust (Tunnel) führt nach ca. 13 s zu einer
+automatischen Pause; die Aufzeichnung wird mit den ersten gültigen
+Geschwindigkeitswerten fortgesetzt (die Tunnelzeit zählt nicht zur Dauer;
+Punkte fehlen dort ohnehin). Sehr langsames Kriechen unter 1,8 km/h gilt als
+Stillstand. Alle Schwellen (`_gpsStandstillMaxSpeedMs`,
+`_gpsStandstillConfirmDuration`, `_gpsResumeMinSpeedMs`) sind Startwerte.
+
+**Betroffene Datei:** `lib/services/track_recording_service.dart`
+
+## 50. Ortssuche und Ziel auf der Track-Seite (Karte)
+
+Auf dem Unterreiter "Karte" der Track-Seite lässt sich ein Ort suchen und als
+Ziel markieren.
+
+**Bedienung:**
+- **Lupe** (links oben): öffnet eine Suchmaske (`widgets/place_search_sheet.dart`)
+  mit Suchfeld und Ergebnisliste. Gesucht wird nur auf ausdrücklichen Befehl
+  (Tastatur-"Suchen" bzw. Lupe im Feld), nicht bei jeder Eingabe. Ein Antippen
+  eines Treffers setzt das Ziel und zeigt eigene Position und Ziel im Bild.
+- **Langes Drücken auf die Karte** markiert den Punkt als Ziel ("Markierter
+  Punkt"), ohne die Karte zu verschieben.
+- **Zielmarker:** rote Nadel (`Icons.place`), die Spitze liegt auf dem Ziel.
+- **Zielkarte** (oben, neben den Karten-Buttons): Zielname sowie Luftlinie und
+  Richtung (Grad) von der eigenen Position, sobald bekannt. Antippen zeigt das
+  Ziel auf der Karte, das Kreuz entfernt es.
+- Das Ziel bleibt über App-Neustarts erhalten (`AppPreferences.destination`,
+  JSON in `shared_preferences`, Schlüssel `destination`).
+
+**Suchdienst (`services/place_search_service.dart`, NEU):** Nominatim von
+OpenStreetMap (kostenlos, ohne API-Key, passend zu den OSM-Kacheln), nur über
+`dart:io` - keine neue Paketabhängigkeit; `INTERNET` ist bereits im Manifest.
+Bewusst eingehaltene Nutzungsbedingungen des öffentlichen Servers: höchstens
+1 Anfrage pro Sekunde, eigener User-Agent (`onTour/1.0 (de.clausjbauer.ontour)`),
+KEINE Autovervollständigung, Quellenangabe in der Suchmaske. Fehler (kein Netz,
+Zeitüberschreitung, Dienstfehler) erscheinen als verständliche Meldung.
+**Für starke Nutzung (z. B. viele Nutzer im Play Store) ist der öffentliche
+Server nicht vorgesehen** - dann wäre ein eigener oder kommerzieller
+Geocoding-Dienst nötig.
+
+**Was es (noch) NICHT ist:** keine Routenführung - angezeigt werden nur
+Luftlinie und Richtung zum Ziel, keine Strecke über Straßen. Das Ziel wird auch
+auf der Kompass-Seite noch nicht berücksichtigt (denkbar als nächster Schritt:
+Peilung zum Ziel auf der Kompassrose).
+
+**Hinweis zur Karte:** Während einer laufenden Aufzeichnung führt die Karte
+sonst bei jedem Punkt zur eigenen Position; nach Anzeige des Ziels ist dieses
+Mitführen 20 Sekunden ausgesetzt, damit das Ziel nicht sofort wieder aus dem
+Bild springt.
+
+**Betroffene/neue Dateien:**
+- `lib/models/place_result.dart` (NEU)
+- `lib/services/place_search_service.dart` (NEU)
+- `lib/ui/widgets/place_search_sheet.dart` (NEU)
+- `lib/services/app_preferences.dart` (`destination`, `setDestination`)
+- `lib/ui/track_page.dart` (Lupe, Zielkarte, Marker, langes Drücken)
+
+## Paketinhalt dieser ZIP
+
+`AndroidManifest.xml` liegt unter `native_android/` (Ziel:
+`android/app/src/main/AndroidManifest.xml`). Die Icon-Dateien
+(`assets/icon/*.png`) sind NICHT enthalten und müssen aus dem bestehenden
+Projekt übernommen werden. `pubspec.yaml` ist unverändert (Version 1.0.0+16).
+
+**Diese ZIP (Abschnitte 46 bis 48):** enthält nur die geänderten bzw. neuen
+Dateien (`lib/models/compass_reading.dart`, `lib/models/pressure_reading.dart`,
+`lib/services/compass_service.dart`, `lib/services/pressure_trend_service.dart`,
+`lib/ui/compass_page.dart`, `lib/ui/compass_calibration_page.dart`,
+`lib/ui/home_shell.dart`) sowie diese `README.md`; alle übrigen Dateien
+bleiben unverändert aus dem bestehenden Projekt. `pubspec.yaml` ist
+unverändert (`sensors_plus` und `path_provider` sind bereits eingebunden).
+
+**Diese ZIP (Abschnitte 49 und 50):** enthält die für die automatische Pause
+(Abschnitt 49) und die Ortssuche (Abschnitt 50) geänderten bzw. neuen Dateien
+sowie diese `README.md`; alle übrigen Dateien bleiben unverändert aus dem
+bestehenden Projekt.

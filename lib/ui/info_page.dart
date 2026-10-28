@@ -1,6 +1,9 @@
 import 'package:auto_hyphenating_text/auto_hyphenating_text.dart';
 import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
+
+import '../services/diagnostic_log_service.dart';
 
 /// Info-Seite: Programmautor, App-Name, App-Version sowie ein Zugang zur
 /// Übersicht aller verwendeten Module (Flutters eingebaute Lizenzseite).
@@ -16,7 +19,45 @@ class InfoPage extends StatefulWidget {
 class _InfoPageState extends State<InfoPage> {
   static const _authorName = 'Claus J. Bauer';
 
+  /// Link zur Play-Store-Entwicklerseite (Liste aller Apps des Autors) -
+  /// siehe README Abschnitt 45. LEER lassen, solange der Link nicht
+  /// eingetragen ist: Dann wird der Button gar nicht erst angezeigt.
+  /// Format z. B. 'https://play.google.com/store/apps/dev?id=1234567890123456789'
+  /// bzw. 'https://play.google.com/store/apps/developer?id=Name'.
+  static const _playStoreDeveloperUrl =
+      'https://play.google.com/store/apps/developer?id=CJBNBG';
+
+  Future<void> _openPlayStoreDeveloperPage() async {
+    var opened = false;
+    try {
+      opened = await launchUrl(
+        Uri.parse(_playStoreDeveloperUrl),
+        mode: LaunchMode.externalApplication,
+      );
+    } catch (_) {
+      opened = false;
+    }
+    if (!opened && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Der Play Store konnte nicht geöffnet werden.')),
+      );
+    }
+  }
+
+  // FEHLERKORREKTUR: DiagnosticLogService hat seit der Umstellung auf ein
+  // Singleton (siehe README Abschnitt 34) nur noch einen privaten
+  // Konstruktor - Zugriff ausschließlich über die statische Instanz
+  // DiagnosticLogService.instance, nicht mehr per DiagnosticLogService().
+  final DiagnosticLogService _diagnosticLogService = DiagnosticLogService.instance;
+
   PackageInfo? _packageInfo;
+
+  /// NEU (siehe README Abschnitt 31): true, sobald eine nicht-leere
+  /// Diagnose-Log-Datei existiert - in einem Release-Build (Play Store)
+  /// immer false, da die Aufzeichnung dort gar nicht erst startet (siehe
+  /// OnTourApplication), der Button erscheint dementsprechend nur in
+  /// Debug-/Test-Builds.
+  bool _hasDiagnosticLog = false;
 
   @override
   void initState() {
@@ -27,6 +68,10 @@ class _InfoPageState extends State<InfoPage> {
     PackageInfo.fromPlatform().then((info) {
       if (!mounted) return;
       setState(() => _packageInfo = info);
+    });
+    _diagnosticLogService.hasLog().then((hasLog) {
+      if (!mounted) return;
+      setState(() => _hasDiagnosticLog = hasLog);
     });
   }
 
@@ -91,6 +136,17 @@ class _InfoPageState extends State<InfoPage> {
               title: AutoHyphenatingText('Programmautor'),
               subtitle: AutoHyphenatingText(_authorName),
             ),
+            if (_playStoreDeveloperUrl.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: OutlinedButton.icon(
+                  onPressed: _openPlayStoreDeveloperPage,
+                  icon: const Icon(Icons.storefront_outlined),
+                  label: AutoHyphenatingText('Meine Apps im Play Store'),
+                ),
+              ),
+            ],
             const SizedBox(height: 24),
             const Divider(),
             const SizedBox(height: 16),
@@ -110,6 +166,30 @@ class _InfoPageState extends State<InfoPage> {
               icon: const Icon(Icons.description_outlined),
               label: AutoHyphenatingText('Verwendete Module'),
             ),
+            // NEU (siehe README Abschnitt 31): Nur sichtbar, wenn
+            // tatsächlich eine Diagnose-Log-Datei existiert - das ist nur
+            // in Debug-/Test-Builds der Fall (siehe OnTourApplication),
+            // in einem Release-Build für den Play Store bleibt dieser
+            // gesamte Abschnitt unsichtbar.
+            if (_hasDiagnosticLog) ...[
+              const SizedBox(height: 24),
+              const Divider(),
+              const SizedBox(height: 16),
+              AutoHyphenatingText(
+                'Zur Fehlersuche zeichnet diese Test-Version fortlaufend ein '
+                'technisches Diagnose-Protokoll auf. Es kann u. a. '
+                'GPS-Positionen und andere technische Daten enthalten - '
+                'bitte nur weitergeben, wenn du gezielt bei der Fehlersuche '
+                'unterstützen möchtest.',
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+              const SizedBox(height: 12),
+              ElevatedButton.icon(
+                onPressed: () => _diagnosticLogService.shareLog(),
+                icon: const Icon(Icons.bug_report_outlined),
+                label: AutoHyphenatingText('Diagnose-Protokoll exportieren'),
+              ),
+            ],
           ],
         ),
       ),

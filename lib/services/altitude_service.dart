@@ -14,8 +14,15 @@ import '../models/altitude_reading.dart';
 /// unabhängig davon funktionieren, ob die Tacho-Seite gerade überhaupt
 /// benutzt wird.
 class AltitudeService {
+  /// NEU (siehe README Abschnitt 37): Öffentlich, damit die
+  /// Genauigkeits-Anzeige auf der Kompass-Seite (`AccuracyBadge`) die
+  /// hier tatsächlich fest verwendete Genauigkeit anzeigen kann, ohne
+  /// sie ein zweites Mal (und damit potenziell abweichend) zu
+  /// duplizieren.
+  static const LocationAccuracy fixedAccuracy = LocationAccuracy.medium;
+
   static const LocationSettings _locationSettings = LocationSettings(
-    accuracy: LocationAccuracy.medium,
+    accuracy: fixedAccuracy,
     distanceFilter: 5,
   );
 

@@ -8,9 +8,11 @@ import '../services/app_preferences.dart';
 import '../services/track_import_export_service.dart';
 import '../services/track_storage_service.dart';
 import '../util/track_formatter.dart';
+import '../util/track_profile_calculator.dart';
 import 'widgets/map_tile_layers.dart';
 import 'widgets/nautical_mode_button.dart';
 import 'widgets/north_lock_button.dart';
+import 'widgets/track_profile_charts.dart';
 
 /// Detailansicht eines einzelnen gespeicherten Tracks: Streckenverlauf auf
 /// derselben umschaltbaren Karte (Landkarte/Seekarte samt
@@ -26,6 +28,18 @@ import 'widgets/north_lock_button.dart';
 /// Kontext zeigte; diese Funktion ist in der Track-Aufzeichnung selbst
 /// bereits enthalten, wodurch eine separate reine "Wo bin ich"-Seite
 /// entfällt.
+///
+/// NEU (siehe README Abschnitt 29): Zwei Unterreiter "Karte" und
+/// "Details" (analog zu TrackPage) - "Details" zeigt die vier Profil-
+/// Diagramme (Geschwindigkeit, Höhe, Anstieg, Steigung/Gefälle) des
+/// gesamten gespeicherten Tracks. Anders als auf der laufenden
+/// Aufzeichnung gibt es hier bewusst KEINE Momentanwerte-Karte - ein
+/// bereits abgeschlossener Track hat kein sinnvolles "jetzt" mehr. Die
+/// Unterreiter sitzen hier (anders als bei TrackPage, das sich die
+/// AppBar mit den übrigen Hauptseiten teilt, siehe HomeShell) direkt in
+/// der eigenen `AppBar` dieser Seite (`bottom: TabBar(...)`), da
+/// TrackDetailPage eine eigenständige, per `Navigator.push` geöffnete
+/// Seite mit eigener AppBar ist.
 class TrackDetailPage extends StatefulWidget {
   final RecordedTrack track;
   final AppPreferences preferences;
@@ -40,7 +54,9 @@ class TrackDetailPage extends StatefulWidget {
   State<TrackDetailPage> createState() => _TrackDetailPageState();
 }
 
-class _TrackDetailPageState extends State<TrackDetailPage> {
+class _TrackDetailPageState extends State<TrackDetailPage> with SingleTickerProviderStateMixin {
+  late final TabController _tabController = TabController(length: 2, vsync: this);
+
   final MapController _mapController = MapController();
   final TrackStorageService _storageService = TrackStorageService();
   final TrackImportExportService _importExportService = TrackImportExportService();
@@ -50,6 +66,11 @@ class _TrackDetailPageState extends State<TrackDetailPage> {
   late final List<LatLng> _points = widget.track.points
       .map((p) => LatLng(p.latitude, p.longitude))
       .toList();
+
+  /// NEU (siehe README Abschnitt 29): Einmalig berechnet (der Track ist
+  /// bereits abgeschlossen, seine Punkte ändern sich nicht mehr) - liefert
+  /// die Datengrundlage für TrackProfileCharts auf dem Details-Tab.
+  late final List<TrackProfilePoint> _profile = TrackProfileCalculator.compute(widget.track.points);
 
   /// Aktuelle Kartendrehung in Grad - fuer die Ausrichtung des Pfeils im
   /// Nord-Steuerelement (siehe NorthLockButton).
@@ -68,6 +89,12 @@ class _TrackDetailPageState extends State<TrackDetailPage> {
       if (!mounted) return;
       setState(() => _rotationDegrees = event.camera.rotation);
     });
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
   }
 
   LatLngBounds? _bounds() {
@@ -149,6 +176,21 @@ class _TrackDetailPageState extends State<TrackDetailPage> {
             onPressed: _handleDelete,
           ),
         ],
+        // NEU (siehe README Abschnitt 29): Unterreiter "Karte"/"Details" -
+        // nur sinnvoll anzeigbar, wenn überhaupt Positionsdaten vorliegen
+        // (siehe _buildBody, das sonst direkt eine Hinweismeldung ohne
+        // Tabs zeigt) - PreferredSize mit Höhe 0 blendet die TabBar in
+        // diesem Fall einfach unsichtbar aus, statt eine leere/nutzlose
+        // TabBar anzuzeigen.
+        bottom: _points.isEmpty
+            ? null
+            : TabBar(
+                controller: _tabController,
+                tabs: const [
+                  Tab(text: 'Karte'),
+                  Tab(text: 'Details'),
+                ],
+              ),
       ),
       // ListenableBuilder sorgt dafür, dass ein Umschalten auf die
       // Seekarte (persistiert in AppPreferences, siehe
@@ -164,8 +206,6 @@ class _TrackDetailPageState extends State<TrackDetailPage> {
   }
 
   Widget _buildBody(BuildContext context) {
-    final nauticalMode = widget.preferences.mapNauticalMode;
-
     if (_points.isEmpty) {
       return Center(
         child: AutoHyphenatingText(
@@ -174,6 +214,21 @@ class _TrackDetailPageState extends State<TrackDetailPage> {
         ),
       );
     }
+
+    return TabBarView(
+      controller: _tabController,
+      children: [
+        _buildMapTab(context),
+        _buildDetailsTab(context),
+      ],
+    );
+  }
+
+  /// Unterreiter "Karte" - entspricht dem bisherigen, alleinigen
+  /// Seiteninhalt (Streckenverlauf samt Start-/Endmarker, Bedien-Icons und
+  /// Statuskarte).
+  Widget _buildMapTab(BuildContext context) {
+    final nauticalMode = widget.preferences.mapNauticalMode;
 
     return Column(
       children: [
@@ -268,6 +323,17 @@ class _TrackDetailPageState extends State<TrackDetailPage> {
           child: _buildStatsCard(context),
         ),
       ],
+    );
+  }
+
+  /// NEU (siehe README Abschnitt 29): Unterreiter "Details" - ausschließlich
+  /// die vier Profil-Diagramme des gesamten Tracks, siehe Klassenkommentar
+  /// für die Begründung, warum es hier (anders als bei der laufenden
+  /// Aufzeichnung) keine Momentanwerte-Karte gibt.
+  Widget _buildDetailsTab(BuildContext context) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: TrackProfileCharts(profile: _profile),
     );
   }
 

@@ -5,59 +5,80 @@ import 'package:sensors_plus/sensors_plus.dart';
 
 import '../models/altitude_reading.dart';
 
+class _PressureSample {
+  final DateTime time;
+  final double hPa;
+  const _PressureSample(this.time, this.hPa);
+}
+
 /// Ermittelt eine deutlich präzisere, rauschärmere Höhe über den
 /// Luftdrucksensor (Barometer, Paket `sensors_plus`) - als Ergänzung zur
 /// GPS-Höhe (siehe [AltitudeService]).
 ///
 /// Ein Barometer liefert für sich genommen nur den ABSOLUTEN Luftdruck,
 /// keine absolute Höhe - der Luftdruck auf Meereshöhe schwankt je nach
-/// Wetterlage (grob 980-1050 hPa statt der oft als Faustregel
-/// angenommenen "Standardatmosphäre" von 1013,25 hPa). Ein direkt aus dem
-/// Luftdruck berechneter absoluter Höhenwert wäre daher ohne Weiteres um
-/// mehrere Zehnermeter falsch.
+/// Wetterlage. Ein direkt aus dem Luftdruck berechneter absoluter Höhenwert
+/// wäre daher ohne Weiteres um mehrere Zehnermeter falsch.
 ///
-/// DESHALB wird der Barometer laufend gegen die vom GPS gelieferte
-/// absolute Höhe "kalibriert" (siehe [calibrate], wird von der
-/// Kompass-Seite bei jeder neuen GPS-Höhenmessung erneut aufgerufen,
-/// damit der Bezug nicht über längere Zeit wegdriftet - z. B. bei
-/// Wetteränderungen während der Nutzung):
-/// - GPS liefert die (grobe, aber absolute) Referenzhöhe.
-/// - Der Barometer liefert danach sehr feine, praktisch rauschfreie
-///   relative ÄNDERUNGEN gegenüber dieser Referenz (Auflösung im
-///   Dezimeterbereich - deutlich besser als die 10-30 m Streuung
-///   typischer GPS-Höhenwerte).
+/// SENSOR-FUSION (überarbeitet, siehe README Abschnitt 44):
+/// - Der Barometer liefert sehr feine, praktisch rauschfreie relative
+///   ÄNDERUNGEN gegenüber einem FESTEN Referenzpunkt (erste Kalibrierung).
+///   Der Druck wird dafür über ein kurzes Zeitfenster (3 s) gemittelt.
+/// - GPS liefert die grobe, aber absolute Höhe. Der Versatz zwischen
+///   Barometer-Höhe und GPS-Höhe wird NICHT hart überschrieben, sondern
+///   über einen Tiefpass LANGSAM nachgeführt (Zeitkonstante 120 s, am
+///   Anfang als laufender Mittelwert der ersten Messungen). Dadurch gibt es
+///   keine Stufen/Sprünge mehr (GPS-Rauschen von 10-30 m schlägt nicht auf
+///   die Anzeige durch), wetterbedingte Luftdruckdrift wird aber trotzdem
+///   ausgeglichen.
 ///
-/// Das ist eine einfache, praktische Sensor-Fusion (kein vollwertiges
-/// Kalman-Filter), aber für eine Höhenanzeige in einer Alltags-App ein
-/// guter, robuster Kompromiss zwischen Aufwand und Nutzen.
+/// Das ist eine einfache, praktische Sensor-Fusion (komplementärer Filter,
+/// kein vollwertiges Kalman-Filter).
 class BarometerAltitudeService {
   /// Exponent der internationalen barometrischen Höhenformel.
   static const double _exponent = 1 / 5.255;
 
+  /// Zeitfenster, über das der Luftdruck gemittelt wird.
+  static const Duration _pressureSmoothingWindow = Duration(seconds: 3);
+
+  /// Zeitkonstante (Sekunden), mit der der Versatz zur GPS-Höhe
+  /// nachgeführt wird - GPS-Rauschen wird dadurch über mehrere Minuten
+  /// gemittelt, Wetterdrift (grob < 10 m pro Stunde) trotzdem verfolgt.
+  static const double _offsetTimeConstantSeconds = 120;
+
   StreamSubscription<BarometerEvent>? _subscription;
   StreamController<AltitudeReading>? _controller;
 
+  final List<_PressureSample> _pressureSamples = [];
+  double? _smoothedPressureHPa;
+
+  /// Fester Referenzpunkt (erste Kalibrierung).
   double? _referencePressureHPa;
   double? _referenceAltitudeMeters;
+
+  /// Langsam nachgeführter Versatz zwischen Barometer-Höhe (relativ zum
+  /// Referenzpunkt) und der GPS-Höhe.
+  double _offsetMeters = 0;
+  int _offsetSampleCount = 0;
+  DateTime? _lastOffsetUpdateAt;
+
   double? _referenceLatitude;
   double? _referenceLongitude;
   double? _referencePositionAccuracyMeters;
-  double? _lastPressureHPa;
 
   /// true, sobald mindestens einmal kalibriert wurde (siehe [calibrate])
   /// - erst dann liefert [altitudeStream] tatsächlich Werte.
   bool get isCalibrated => _referencePressureHPa != null;
 
-  /// Setzt/aktualisiert den Referenzpunkt für die Barometer-Berechnung.
+  /// Wird bei jeder neuen GPS-Höhenmessung aufgerufen. Die erste Messung
+  /// legt den festen Referenzpunkt fest, jede weitere führt nur den
+  /// Versatz zur GPS-Höhe langsam nach (siehe Klassenkommentar).
   /// [referenceLatitude]/[referenceLongitude]/[referencePositionAccuracyMeters]
-  /// werden NICHT für die eigentliche Höhenberechnung benötigt, sondern
-  /// nur "durchgereicht" - der Barometer selbst kennt weder Position noch
-  /// deren Genauigkeit, die von ihm erzeugten [AltitudeReading]s sollen
-  /// aber trotzdem beides (die zuletzt bekannten GPS-Werte) für die
-  /// Positionsanzeige auf der Kompass-Seite enthalten.
+  /// werden NICHT für die Höhenberechnung benötigt, sondern nur
+  /// "durchgereicht" (Positionsanzeige auf der Kompass-Seite) und bei
+  /// jedem Aufruf aktualisiert.
   /// [referencePressureHPa] kann weggelassen werden, dann wird der
-  /// zuletzt vom Sensor gelieferte Druckwert verwendet (sofern bereits
-  /// einer vorliegt).
+  /// gemittelte Sensor-Druck verwendet (sofern bereits einer vorliegt).
   void calibrate({
     required double referenceAltitudeMeters,
     required double referenceLatitude,
@@ -65,13 +86,48 @@ class BarometerAltitudeService {
     double? referencePositionAccuracyMeters,
     double? referencePressureHPa,
   }) {
-    final pressure = referencePressureHPa ?? _lastPressureHPa;
+    final pressure = referencePressureHPa ?? _smoothedPressureHPa;
     if (pressure == null) return; // noch kein Luftdruckwert vorhanden
-    _referenceAltitudeMeters = referenceAltitudeMeters;
+
     _referenceLatitude = referenceLatitude;
     _referenceLongitude = referenceLongitude;
     _referencePositionAccuracyMeters = referencePositionAccuracyMeters;
-    _referencePressureHPa = pressure;
+
+    final now = DateTime.now();
+    final refPressure = _referencePressureHPa;
+    final refAltitude = _referenceAltitudeMeters;
+    if (refPressure == null || refAltitude == null) {
+      // Erste Kalibrierung: fester Referenzpunkt, Versatz startet bei 0.
+      _referencePressureHPa = pressure;
+      _referenceAltitudeMeters = referenceAltitudeMeters;
+      _offsetMeters = 0;
+      _offsetSampleCount = 1;
+      _lastOffsetUpdateAt = now;
+      return;
+    }
+
+    // Soll-Versatz: Differenz zwischen GPS-Höhe und der reinen
+    // Barometer-Höhe (relativ zum festen Referenzpunkt).
+    final target = referenceAltitudeMeters - _rawBarometricAltitude(pressure);
+    final last = _lastOffsetUpdateAt ?? now;
+    final dtSeconds = now.difference(last).inMilliseconds / 1000;
+    // Anfangs laufender Mittelwert (1/(n+1)), später exponentieller
+    // Tiefpass - je nachdem, welcher Faktor größer ist.
+    final timeAlpha = 1 - math.exp(-dtSeconds / _offsetTimeConstantSeconds);
+    final alpha = math.max(timeAlpha, 1 / (_offsetSampleCount + 1));
+    _offsetMeters += (target - _offsetMeters) * alpha;
+    _offsetSampleCount++;
+    _lastOffsetUpdateAt = now;
+  }
+
+  /// Höhe nur aus Druckdifferenz zum Referenzpunkt (ohne GPS-Versatz).
+  double _rawBarometricAltitude(double pressureHPa) {
+    final refPressure = _referencePressureHPa!;
+    final refAltitude = _referenceAltitudeMeters!;
+    // Barometrische Höhenformel (internationale Höhenformel) für die
+    // Höhen-DIFFERENZ gegenüber dem Referenzpunkt.
+    final delta = 44330.0 * (1 - math.pow(pressureHPa / refPressure, _exponent));
+    return refAltitude + delta;
   }
 
   Stream<AltitudeReading> altitudeStream() {
@@ -85,34 +141,37 @@ class BarometerAltitudeService {
   void _startListening() {
     _subscription = barometerEventStream().listen(
       (event) {
-        _lastPressureHPa = event.pressure;
-        final refPressure = _referencePressureHPa;
-        final refAltitude = _referenceAltitudeMeters;
-        if (refPressure == null || refAltitude == null) {
+        final now = DateTime.now();
+        _pressureSamples.add(_PressureSample(now, event.pressure));
+        _pressureSamples.removeWhere(
+          (s) => now.difference(s.time) > _pressureSmoothingWindow,
+        );
+        var sum = 0.0;
+        for (final s in _pressureSamples) {
+          sum += s.hPa;
+        }
+        final smoothed = sum / _pressureSamples.length;
+        _smoothedPressureHPa = smoothed;
+
+        if (_referencePressureHPa == null || _referenceAltitudeMeters == null) {
           // Noch nicht kalibriert - wartet auf die erste GPS-Höhe
           // (siehe calibrate()).
           return;
         }
 
-        // Barometrische Höhenformel (internationale Höhenformel) für die
-        // Höhen-DIFFERENZ gegenüber dem zuletzt gesetzten Referenzpunkt.
-        final delta =
-            44330.0 * (1 - math.pow(event.pressure / refPressure, _exponent));
-
         _controller?.add(AltitudeReading(
-          altitudeMeters: refAltitude + delta,
+          altitudeMeters: _rawBarometricAltitude(smoothed) + _offsetMeters,
           // Bezieht sich nur auf die (sehr feine) Sensorauflösung selbst -
           // die absolute Richtigkeit hängt weiterhin von der Güte der
-          // letzten GPS-Kalibrierung ab, siehe Klassen-Dokumentation.
+          // GPS-Referenz ab, siehe Klassen-Dokumentation.
           altitudeAccuracyMeters: 0.3,
-          // Position stammt vom letzten Kalibrierungszeitpunkt (siehe
+          // Position stammt von der letzten GPS-Messung (siehe
           // calibrate()) - der Barometer selbst liefert keine eigene
-          // Position, aktualisiert sich aber ohnehin bei jeder neuen
-          // GPS-Höhenmessung erneut.
+          // Position.
           latitude: _referenceLatitude!,
           longitude: _referenceLongitude!,
           positionAccuracyMeters: _referencePositionAccuracyMeters,
-          timestamp: DateTime.now(),
+          timestamp: now,
         ));
       },
       onError: (Object error) {
@@ -131,11 +190,15 @@ class BarometerAltitudeService {
     await _controller?.close();
     _subscription = null;
     _controller = null;
+    _pressureSamples.clear();
+    _smoothedPressureHPa = null;
     _referencePressureHPa = null;
     _referenceAltitudeMeters = null;
+    _offsetMeters = 0;
+    _offsetSampleCount = 0;
+    _lastOffsetUpdateAt = null;
     _referenceLatitude = null;
     _referenceLongitude = null;
     _referencePositionAccuracyMeters = null;
-    _lastPressureHPa = null;
   }
 }

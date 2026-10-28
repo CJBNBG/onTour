@@ -125,6 +125,10 @@ class GpxConverter {
         latitude: lat,
         longitude: lon,
         altitudeMeters: altitude,
+        // GPX kennt kein Standardfeld für die Geschwindigkeit (siehe
+        // README Abschnitt 20/29) - TrackProfileCalculator schätzt sie
+        // bei Bedarf ersatzweise aus Distanz/Zeit zum vorherigen Punkt.
+        speedMetersPerSecond: null,
         timestamp: timestamp,
       ));
     }

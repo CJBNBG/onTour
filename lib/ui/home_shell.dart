@@ -2,8 +2,10 @@ import 'dart:async';
 
 import 'package:auto_hyphenating_text/auto_hyphenating_text.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../services/app_preferences.dart';
+import '../services/pressure_trend_service.dart';
 import '../services/track_recording_service.dart';
 import 'compass_page.dart';
 import 'info_page.dart';
@@ -40,6 +42,17 @@ import 'track_page.dart';
 /// Services, Anzeigetexte), heisst seit einer spaeteren Ueberarbeitung
 /// durchgaengig "Track" (siehe README Abschnitt 19) - Dateien, Klassen und
 /// Variablen wurden entsprechend umbenannt.
+///
+/// NEU (siehe README Abschnitt 23): Antippen der Erinnerungs-
+/// Benachrichtigung für eine anhaltend pausierte Aufzeichnung (siehe
+/// Abschnitt 22) soll direkt zum Track-Tab führen, da dort die
+/// zugehörigen Bedienelemente (Fortsetzen/Beenden) liegen. Dafür fragt
+/// [_checkPendingNavigation] bei jedem Start UND bei jedem Zurückkehren
+/// in den Vordergrund (`AppLifecycleState.resumed`) über einen
+/// MethodChannel bei der nativen Seite nach, ob ein solcher
+/// Navigationswunsch vorliegt ("Pull"-Modell) - siehe dortiger Kommentar
+/// für die Begründung, warum kein "Push" von nativ nach Dart verwendet
+/// wird.
 class HomeShell extends StatefulWidget {
   final AppPreferences preferences;
 
@@ -49,23 +62,78 @@ class HomeShell extends StatefulWidget {
   State<HomeShell> createState() => _HomeShellState();
 }
 
-class _HomeShellState extends State<HomeShell> {
+class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
   // Start-Tab ist bewusst "Tacho" (Index 0), da sie die Hauptfunktion der
   // App darstellt und deshalb auch als Erstes in der Navigationsleiste
   // steht.
   int _selectedIndex = 0;
 
+  /// Index des Track-Tabs - als benannte Konstante, damit
+  /// [_checkPendingNavigation] nicht mit einer "magischen" 2 arbeitet.
+  static const _trackTabIndex = 2;
+
   // Siehe Klassenkommentar: lebt bewusst so lange wie HomeShell selbst,
   // nicht nur so lange wie die jeweils sichtbare TrackPage.
   final TrackRecordingService _trackRecordingService = TrackRecordingService();
 
+  /// NEU (siehe README Abschnitt 47): Luftdruck-Verlauf für den
+  /// 3-Stunden-Trend - lebt wie der TrackRecordingService bewusst so lange
+  /// wie HomeShell, da ein Trend den Verlauf über Stunden braucht, der bei
+  /// jedem Seitenwechsel sonst verloren ginge.
+  final PressureTrendService _pressureTrendService = PressureTrendService();
+
   static const _titles = ['Tacho', 'Kompass', 'Track', 'Einstellungen'];
+
+  /// Siehe Klassenkommentar (Abschnitt 23) - Methodenname auf nativer
+  /// Seite muss exakt übereinstimmen (OnTourApplication.kt).
+  static const MethodChannel _navigationChannel = MethodChannel('ontour/navigation');
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    // NEU (README Abschnitt 47): Startet die fortlaufende Luftdruck-
+    // Aufzeichnung (lädt zuvor einen ggf. gesicherten Verlauf).
+    unawaited(_pressureTrendService.start());
+    // Deckt den Fall ab, dass die App durch Antippen der Erinnerungs-
+    // Benachrichtigung frisch gestartet wurde (siehe Abschnitt 23).
+    _checkPendingNavigation();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Deckt den Fall ab, dass die App bereits lief (Activity existierte
+    // noch) und lediglich per Benachrichtigung in den Vordergrund geholt
+    // wurde - HomeShell.initState läuft in diesem Fall NICHT erneut,
+    // wohl aber dieser Lifecycle-Callback.
+    if (state == AppLifecycleState.resumed) {
+      _checkPendingNavigation();
+    }
+  }
+
+  Future<void> _checkPendingNavigation() async {
+    bool shouldOpenTrackTab;
+    try {
+      shouldOpenTrackTab =
+          await _navigationChannel.invokeMethod<bool>('consumePendingOpenTrackTab') ?? false;
+    } catch (_) {
+      // Reiner Komfort-Zusatz (siehe Abschnitt 23) - ein Fehlschlag (z. B.
+      // auf einer Plattform ohne die native Implementierung) darf die
+      // App nicht beeinträchtigen.
+      return;
+    }
+    if (shouldOpenTrackTab && mounted) {
+      setState(() => _selectedIndex = _trackTabIndex);
+    }
+  }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     // Nur hier (App/HomeShell wird komplett beendet) darf der Service
     // endgueltig geschlossen werden - siehe TrackRecordingService.dispose.
     unawaited(_trackRecordingService.dispose());
+    unawaited(_pressureTrendService.dispose());
     super.dispose();
   }
 
@@ -108,8 +176,11 @@ class _HomeShellState extends State<HomeShell> {
       case 0:
         return SpeedPage(preferences: widget.preferences);
       case 1:
-        return const CompassPage();
-      case 2:
+        return CompassPage(
+          preferences: widget.preferences,
+          pressureService: _pressureTrendService,
+        );
+      case _trackTabIndex:
         return TrackPage(
           recordingService: _trackRecordingService,
           preferences: widget.preferences,

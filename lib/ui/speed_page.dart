@@ -4,13 +4,18 @@ import 'package:auto_hyphenating_text/auto_hyphenating_text.dart';
 import 'package:flutter/material.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
+import '../models/speed_display_style.dart';
 import '../models/speed_reading.dart';
+import '../models/speed_scale.dart';
 import '../models/speed_unit.dart';
 import '../services/app_preferences.dart';
 import '../services/motion_service.dart';
 import '../services/satellite_service.dart';
 import '../services/speed_service.dart';
 import '../util/speed_formatter.dart';
+import 'widgets/accuracy_badge.dart';
+import 'widgets/analog_speed_gauge.dart';
+import 'widgets/measurement_pulse_indicator.dart';
 import 'widgets/seven_segment_display.dart';
 
 /// Zeigt die aktuelle Geschwindigkeit möglichst bildschirmfüllend an,
@@ -38,6 +43,12 @@ class _SpeedPageState extends State<SpeedPage> {
   LocationAvailability _availability = LocationAvailability.checking;
   SpeedReading? _latestReading;
   int? _satelliteCount;
+
+  /// NEU (siehe README Abschnitt 37): Wird bei jeder neuen
+  /// Geschwindigkeitsmessung erhöht - dient MeasurementPulseIndicator als
+  /// Auslöser für den kurzen optischen Impuls, kennt selbst keine
+  /// fachliche Bedeutung.
+  int _measurementTick = 0;
 
   /// Zuletzt vom Bewegungssensor gemeldeter Stillstands-Status. null,
   /// solange noch keine Messung vorliegt bzw. kein Sensor verfügbar ist -
@@ -77,7 +88,10 @@ class _SpeedPageState extends State<SpeedPage> {
         .listen(
       (reading) {
         if (!mounted) return;
-        setState(() => _latestReading = reading);
+        setState(() {
+          _latestReading = reading;
+          _measurementTick++;
+        });
       },
       onError: (Object error) {
         if (!mounted) return;
@@ -119,8 +133,28 @@ class _SpeedPageState extends State<SpeedPage> {
         // exakt gleich breit (siehe auch SizedBox(width: double.infinity)
         // weiter unten in _buildUnitSelector).
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-        child: _buildBody(context),
+        child: Column(
+          children: [
+            // NEU (siehe README Abschnitt 37): Zeigt die auf dieser Seite
+            // AKTUELL verwendete Genauigkeitsstufe (hier: die vom Nutzer
+            // in den Einstellungen gewählte, siehe Abschnitt 4) sowie
+            // einen kurzen optischen Impuls bei jeder neuen Messung.
+            _buildStatusRow(context),
+            const SizedBox(height: 8),
+            Expanded(child: _buildBody(context)),
+          ],
+        ),
       ),
+    );
+  }
+
+  Widget _buildStatusRow(BuildContext context) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        AccuracyBadge(mode: widget.preferences.speedAccuracyMode),
+        MeasurementPulseIndicator(pulseKey: _measurementTick),
+      ],
     );
   }
 
@@ -225,6 +259,8 @@ class _SpeedPageState extends State<SpeedPage> {
         ? unit.fromMetersPerSecond(reading!.speedAccuracyMetersPerSecond!)
         : null;
 
+    final analog = widget.preferences.speedDisplayStyle == SpeedDisplayStyle.analog;
+
     return Column(
       children: [
         // Die Geschwindigkeit nimmt bewusst den mit Abstand größten Teil
@@ -235,19 +271,28 @@ class _SpeedPageState extends State<SpeedPage> {
         // Größe.
         Expanded(
           child: Center(
-            child: FittedBox(
-              fit: BoxFit.contain,
-              child: _buildSpeedNumber(integerPart, decimalDigit),
+            child: analog
+                // NEU: Analoges Rundinstrument (Einheit steht im Zifferblatt).
+                ? AnalogSpeedGauge(
+                    value: displayValue,
+                    maxValue: widget.preferences.speedScaleMax(unit),
+                    valueText: speedText,
+                    unitSymbol: unit.symbol,
+                  )
+                : FittedBox(
+                    fit: BoxFit.contain,
+                    child: _buildSpeedNumber(integerPart, decimalDigit),
+                  ),
+          ),
+        ),
+        if (!analog)
+          AutoHyphenatingText(
+            unit.symbol,
+            style: TextStyle(
+              fontSize: 40,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
             ),
           ),
-        ),
-        AutoHyphenatingText(
-          unit.symbol,
-          style: TextStyle(
-            fontSize: 40,
-            color: Theme.of(context).colorScheme.onSurfaceVariant,
-          ),
-        ),
         const SizedBox(height: 12),
         AutoHyphenatingText(
           SpeedFormatter.formatAccuracy(accuracyDisplayValue, unit),
@@ -273,6 +318,10 @@ class _SpeedPageState extends State<SpeedPage> {
         ),
         const SizedBox(height: 24),
         _buildUnitSelector(context, unit),
+        if (analog) ...[
+          const SizedBox(height: 12),
+          _buildScaleSelector(context, unit),
+        ],
       ],
     );
   }
@@ -311,6 +360,35 @@ class _SpeedPageState extends State<SpeedPage> {
         Padding(
           padding: const EdgeInsets.only(top: 4),
           child: SevenSegmentDisplay(text: decimalDigit, height: decimalHeight),
+        ),
+      ],
+    );
+  }
+
+  /// NEU: Auswahl des Skalenendes für den analogen Tacho. Die Segmente
+  /// richten sich nach der gewählten Einheit (siehe SpeedScale), jede
+  /// Einheit behält ihre eigene letzte Wahl (AppPreferences.speedScaleMax).
+  /// Normales Text statt AutoHyphenatingText (siehe README Abschnitt 13).
+  Widget _buildScaleSelector(BuildContext context, SpeedUnit unit) {
+    return Column(
+      children: [
+        AutoHyphenatingText(
+          'Skalenende (${unit.symbol})',
+          style: Theme.of(context).textTheme.labelLarge,
+        ),
+        const SizedBox(height: 8),
+        SizedBox(
+          width: double.infinity,
+          child: SegmentedButton<int>(
+            segments: [
+              for (final value in SpeedScale.optionsFor(unit))
+                ButtonSegment(value: value, label: Text('$value')),
+            ],
+            selected: {widget.preferences.speedScaleMax(unit)},
+            onSelectionChanged: (selection) {
+              widget.preferences.setSpeedScaleMax(unit, selection.first);
+            },
+          ),
         ),
       ],
     );

@@ -1,19 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- ==== Berechtigungen (siehe README Abschnitt 2) ==== -->
+    <!-- Laden der Kartenkacheln (OpenStreetMap/OpenSeaMap). -->
     <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- Standort für Tacho, Track und Satellitenanzahl. -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
+    <!-- Für den Foreground-Service während einer Track-Aufzeichnung
+         (siehe Abschnitt 19). FOREGROUND_SERVICE seit Android 9 für jeden
+         Foreground-Service nötig, FOREGROUND_SERVICE_LOCATION zusätzlich
+         ab Android 14 (API 34) für einen Foreground-Service vom Typ
+         "location" - geolocator startet einen solchen automatisch, sobald
+         ein ForegroundNotificationConfig übergeben wird (siehe
+         TrackRecordingService._startListening). -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION"/>
+    <!-- Ab Android 13 (API 33) für JEDE Benachrichtigung nötig - sowohl
+         für die dauerhafte Aufzeichnungs-Benachrichtigung (Abschnitt 19)
+         als auch für die Pause-Erinnerung (Abschnitt 22). -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <!-- Für enableWakeLock: true in der Foreground-Service-Konfiguration
+         (Abschnitt 19) zwingend nötig, sonst SecurityException beim Start
+         der Aufzeichnung. Normale ("ungefährliche") Berechtigung - wird
+         automatisch bei der Installation gewährt, keine Laufzeit-Abfrage
+         nötig. -->
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
+    <!-- ==== Anwendung ====
+         android:name=".OnTourApplication" - NEU (Abschnitt 21): eigene
+         Application-Klasse, die schon beim Start des Android-Prozesses
+         eine app-weite, dauerhafte FlutterEngine erzeugt - Grundlage
+         dafür, dass eine laufende Track-Aufzeichnung ein Wischen aus den
+         zuletzt verwendeten Apps übersteht. -->
     <application
         android:label="onTour"
-        android:name="${applicationName}"
+        android:name=".OnTourApplication"
         android:icon="@mipmap/launcher_icon">
+        <!-- android:launchMode="singleTask" - NEU (Abschnitt 23): sorgt
+             dafür, dass ein Antippen der Pause-Erinnerung bei bereits
+             existierender Activity zuverlässig onNewIntent auf der
+             VORHANDENEN Instanz auslöst statt eine zweite, parallele
+             Instanz zu erzeugen (die sich sonst die persistente
+             FlutterEngine aus Abschnitt 21 streitig machen würde).
+
+             android:screenOrientation="portrait" - NEU (Abschnitt 21):
+             robuster, von der Activity-/Engine-Start-Reihenfolge
+             unabhängiger Ersatz für den Dart-seitigen
+             SystemChrome.setPreferredOrientations(...)-Aufruf in
+             main.dart, der durch die persistente Engine jetzt schon vor
+             der ersten Activity läuft und deshalb u. U. wirkungslos
+             bleiben könnte. -->
         <activity
             android:name=".MainActivity"
+            android:screenOrientation="portrait"
             android:exported="true"
-            android:launchMode="singleTop"
+            android:launchMode="singleTask"
             android:taskAffinity=""
             android:theme="@style/LaunchTheme"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
@@ -37,6 +77,14 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
+        <!-- NEU (Abschnitt 22): Empfänger für den nativ geplanten
+             Erinnerungs-Alarm bei anhaltend pausierter Track-
+             Aufzeichnung. exported="false", da er ausschließlich vom
+             eigenen, intern gesetzten AlarmManager-Alarm ausgelöst werden
+             soll, nicht von anderen Apps. -->
+        <receiver
+            android:name=".AutoPauseReminderReceiver"
+            android:exported="false" />
     </application>
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and
@@ -44,6 +92,13 @@
 
          In particular, this is used by the Flutter engine in io.flutter.plugin.text.ProcessTextPlugin. -->
     <queries>
+        <!-- NEU (Abschnitt 45): url_launcher benoetigt ab Android 11 diese
+             Paketsichtbarkeit, um https-Links extern (Play Store) zu
+             oeffnen. -->
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <data android:scheme="https"/>
+        </intent>
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>

@@ -1,7 +1,7 @@
 name: ontour
 description: Kompass-, Tacho- und Karten-App für Android
 publish_to: 'none'
-version: 1.0.0+12
+version: 1.0.0+19
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
@@ -11,7 +11,7 @@ dependencies:
     sdk: flutter
 
   # Standort- und Geschwindigkeitsermittlung (GPS/Netzwerk)
-  geolocator: ^14.0.3
+  geolocator: ^14.1.2
 
   # Magnetkompass (Himmelsrichtung des Geräts)
   flutter_compass: ^0.8.1
@@ -21,11 +21,11 @@ dependencies:
   latlong2: ^0.10.1
 
   # Persistieren von Einstellungen (Anzeigemodus, gewählte Einheit)
-  shared_preferences: ^2.5.5
+  shared_preferences: ^2.5.6
 
   # Beschleunigungssensor zur Stillstands-Erkennung (unterdrückt GPS-
   # Rauschen in der Geschwindigkeitsanzeige, siehe motion_service.dart)
-  sensors_plus: ^7.1.0
+  sensors_plus: ^7.1.1
 
   # Zahlenformatierung (deutsches Komma als Dezimaltrennzeichen)
   intl: ^0.20.3
@@ -37,7 +37,7 @@ dependencies:
   wakelock_plus: ^1.8.0
 
   # Liefert Name/Version der App zur Laufzeit für die Info-Seite
-  package_info_plus: ^10.2.1
+  package_info_plus: ^10.2.2
 
   # Liefert das app-eigene Dokumentenverzeichnis, in dem aufgezeichnete
   # Tracks als JSON-Dateien abgelegt werden (siehe track_storage_service.dart)
@@ -45,16 +45,29 @@ dependencies:
 
   # XML-Erzeugung/-Parsing für den GPX-Import/-Export von Tracks
   # (siehe util/gpx_converter.dart, README Abschnitt 20)
-  xml: ^7.0.1
+  xml: ^7.1.0
 
   # Öffnet den nativen Android-"Teilen"-Dialog zum Exportieren eines
   # Tracks als GPX-Datei (siehe services/track_import_export_service.dart,
   # README Abschnitt 20)
-  share_plus: ^13.3.0
+  share_plus: ^13.3.1
 
   # Datei-Auswahl-Dialog zum Importieren einer GPX-Datei (siehe
   # services/track_import_export_service.dart, README Abschnitt 20)
-  file_picker: ^12.3.0
+  file_picker: ^13.1.0
+
+  # NEU (siehe README Abschnitt 36): Laufzeit-Abfrage der Benachrichtigungs-
+  # Berechtigung (POST_NOTIFICATIONS, ab Android 13 nötig, damit die
+  # Foreground-Service-Benachrichtigung der Track-Aufzeichnung überhaupt
+  # angezeigt wird) - übernimmt außerdem korrekt die Zuordnung zur jeweils
+  # aktuellen Activity trotz der persistenten FlutterEngine (Abschnitt 21),
+  # was ein manuell per MethodChannel gebauter Ansatz deutlich
+  # fehleranfälliger gemacht hätte.
+  permission_handler: ^13.0.2
+
+  # NEU (siehe README Abschnitt 45): Oeffnet die Play-Store-Entwicklerseite
+  # (Liste aller Apps des Autors) vom Info-Bildschirm aus.
+  url_launcher: ^6.3.3
 
 dev_dependencies:
   flutter_test:
