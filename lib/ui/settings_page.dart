@@ -5,7 +5,10 @@ import 'package:flutter/material.dart';
 import '../models/position_display_format.dart';
 import '../models/speed_display_style.dart';
 import '../models/speed_accuracy_mode.dart';
+import '../models/speed_scale.dart';
+import '../models/speed_unit.dart';
 import '../services/app_preferences.dart';
+import 'widgets/stacked_segment_label.dart';
 
 /// Einstellungsseite, unterteilt in zwei Unterreiter (NEU, siehe README
 /// Abschnitt 24):
@@ -109,20 +112,18 @@ class _SettingsPageState extends State<SettingsPage> with SingleTickerProviderSt
             segments: [
               ButtonSegment(
                 value: ThemeMode.system,
-                label: Text('System'),
-                icon: const Icon(Icons.brightness_auto),
+                label: StackedSegmentLabel(icon: Icons.brightness_auto, text: 'System'),
               ),
               ButtonSegment(
                 value: ThemeMode.light,
-                label: Text('Hell'),
-                icon: const Icon(Icons.light_mode),
+                label: StackedSegmentLabel(icon: Icons.light_mode, text: 'Hell'),
               ),
               ButtonSegment(
                 value: ThemeMode.dark,
-                label: Text('Dunkel'),
-                icon: const Icon(Icons.dark_mode),
+                label: StackedSegmentLabel(icon: Icons.dark_mode, text: 'Dunkel'),
               ),
             ],
+            showSelectedIcon: false,
             selected: {widget.preferences.themeMode},
             onSelectionChanged: (selection) {
               widget.preferences.setThemeMode(selection.first);
@@ -131,6 +132,12 @@ class _SettingsPageState extends State<SettingsPage> with SingleTickerProviderSt
         ),
         const SizedBox(height: 32),
         _buildSpeedDisplayStyleSection(context),
+        // NEU: Skalenenden des analogen Tachos - nur sichtbar, solange die
+        // analoge Darstellung gewählt ist.
+        if (widget.preferences.speedDisplayStyle == SpeedDisplayStyle.analog) ...[
+          const SizedBox(height: 32),
+          _buildSpeedScaleSection(context),
+        ],
         const SizedBox(height: 32),
         _buildPositionDisplayFormatSection(context),
       ],
@@ -154,15 +161,14 @@ class _SettingsPageState extends State<SettingsPage> with SingleTickerProviderSt
             segments: const [
               ButtonSegment(
                 value: SpeedDisplayStyle.digital,
-                label: Text('Digital'),
-                icon: Icon(Icons.pin),
+                label: StackedSegmentLabel(icon: Icons.pin, text: 'Digital'),
               ),
               ButtonSegment(
                 value: SpeedDisplayStyle.analog,
-                label: Text('Analog'),
-                icon: Icon(Icons.speed),
+                label: StackedSegmentLabel(icon: Icons.speed, text: 'Analog'),
               ),
             ],
+            showSelectedIcon: false,
             selected: {style},
             onSelectionChanged: (selection) {
               widget.preferences.setSpeedDisplayStyle(selection.first);
@@ -171,6 +177,42 @@ class _SettingsPageState extends State<SettingsPage> with SingleTickerProviderSt
         ),
         const SizedBox(height: 8),
         AutoHyphenatingText(style.description, style: Theme.of(context).textTheme.bodySmall),
+      ],
+    );
+  }
+
+  /// NEU: Skalenende des analogen Tachos, für jede Anzeigeeinheit
+  /// separat (vorher auf der Tacho-Seite). Die Wahl gilt immer für die
+  /// jeweilige Einheit, unabhängig davon, welche gerade aktiv ist.
+  /// Normales Text in den Segmenten, siehe README Abschnitt 13.
+  Widget _buildSpeedScaleSection(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        AutoHyphenatingText(
+          'Skalenende des analogen Tachos',
+          style: Theme.of(context).textTheme.titleMedium,
+        ),
+        const SizedBox(height: 8),
+        for (final unit in SpeedUnit.values) ...[
+          Padding(
+            padding: const EdgeInsets.only(top: 8, bottom: 4),
+            child: Text(unit.symbol, style: Theme.of(context).textTheme.labelLarge),
+          ),
+          SizedBox(
+            width: double.infinity,
+            child: SegmentedButton<int>(
+              segments: [
+                for (final value in SpeedScale.optionsFor(unit))
+                  ButtonSegment(value: value, label: Text('$value')),
+              ],
+              selected: {widget.preferences.speedScaleMax(unit)},
+              onSelectionChanged: (selection) {
+                widget.preferences.setSpeedScaleMax(unit, selection.first);
+              },
+            ),
+          ),
+        ],
       ],
     );
   }

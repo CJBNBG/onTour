@@ -1,12 +1,16 @@
 /// Vom Nutzer über den Schieberegler wählbare Anzeigeeinheit für die
 /// Geschwindigkeit. Die Reihenfolge der Werte entspricht bewusst der
-/// Reihenfolge auf dem Schieberegler (Index 0/1/2).
+/// Reihenfolge der Einheitenwahl (Index 0-3: m/s, km/h, mph, kn).
 enum SpeedUnit {
   /// Meter pro Sekunde - die "rohe" Einheit, in der Geolocator Werte liefert.
   metersPerSecond('m/s'),
 
   /// Kilometer pro Stunde.
   kilometersPerHour('km/h'),
+
+  /// Meilen pro Stunde (Statute Miles, 1609,344 m) - v. a. im
+  /// angloamerikanischen Straßenverkehr üblich.
+  milesPerHour('mph'),
 
   /// Knoten (Seemeilen pro Stunde) - u. a. in der Schiff-/Luftfahrt üblich.
   knots('kn');
@@ -27,6 +31,9 @@ enum SpeedUnit {
         // 1 m/s = 1,9438444924574 kn (exakter Umrechnungsfaktor über die
         // international festgelegte Seemeile von 1852 m).
         return metersPerSecond * 1.9438444924574;
+      case SpeedUnit.milesPerHour:
+        // 1 m/s = 2,2369362920544 mph (1 mile = 1609,344 m exakt).
+        return metersPerSecond * 2.2369362920544;
     }
   }
 }

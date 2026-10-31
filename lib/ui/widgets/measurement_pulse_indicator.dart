@@ -65,7 +65,7 @@ class _MeasurementPulseIndicatorState extends State<MeasurementPulseIndicator>
         final opacity = t <= 0.15 ? (t / 0.15) : (1 - (t - 0.15) / 0.85);
         return Opacity(
           opacity: opacity.clamp(0.0, 1.0),
-          child: Icon(Icons.satellite_alt, size: widget.size, color: color),
+          child: Icon(Icons.fiber_manual_record, size: widget.size, color: color),
         );
       },
     );

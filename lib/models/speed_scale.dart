@@ -14,6 +14,8 @@ class SpeedScale {
         return const [50, 100, 200, 300];
       case SpeedUnit.knots:
         return const [10, 20, 50, 100];
+      case SpeedUnit.milesPerHour:
+        return const [30, 60, 120, 180];
     }
   }
 
@@ -25,6 +27,8 @@ class SpeedScale {
         return 100;
       case SpeedUnit.knots:
         return 20;
+      case SpeedUnit.milesPerHour:
+        return 60;
     }
   }
 

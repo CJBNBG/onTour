@@ -9,14 +9,15 @@ import '../models/speed_reading.dart';
 import '../models/speed_scale.dart';
 import '../models/speed_unit.dart';
 import '../services/app_preferences.dart';
-import '../services/motion_service.dart';
-import '../services/satellite_service.dart';
+import '../services/device_status_service.dart';
 import '../services/speed_service.dart';
 import '../util/speed_formatter.dart';
 import 'widgets/accuracy_badge.dart';
+import 'widgets/accuracy_text_style.dart';
 import 'widgets/analog_speed_gauge.dart';
 import 'widgets/measurement_pulse_indicator.dart';
 import 'widgets/seven_segment_display.dart';
+import 'widgets/stacked_segment_label.dart';
 
 /// Zeigt die aktuelle Geschwindigkeit möglichst bildschirmfüllend an,
 /// darunter (klein) die Genauigkeit sowie - sofern verfügbar - die Anzahl
@@ -25,7 +26,11 @@ import 'widgets/seven_segment_display.dart';
 class SpeedPage extends StatefulWidget {
   final AppPreferences preferences;
 
-  const SpeedPage({super.key, required this.preferences});
+  /// NEU: gemeinsamer Gerätestatus aus HomeShell (Satelliten/Stillstand,
+  /// angezeigt im Statusbereich unter der App-Leiste).
+  final DeviceStatusService status;
+
+  const SpeedPage({super.key, required this.preferences, required this.status});
 
   @override
   State<SpeedPage> createState() => _SpeedPageState();
@@ -33,16 +38,11 @@ class SpeedPage extends StatefulWidget {
 
 class _SpeedPageState extends State<SpeedPage> {
   final SpeedService _speedService = SpeedService();
-  final SatelliteService _satelliteService = SatelliteService();
-  final MotionService _motionService = MotionService();
 
   StreamSubscription<SpeedReading>? _speedSubscription;
-  StreamSubscription<int>? _satelliteSubscription;
-  StreamSubscription<bool>? _motionSubscription;
 
   LocationAvailability _availability = LocationAvailability.checking;
   SpeedReading? _latestReading;
-  int? _satelliteCount;
 
   /// NEU (siehe README Abschnitt 37): Wird bei jeder neuen
   /// Geschwindigkeitsmessung erhöht - dient MeasurementPulseIndicator als
@@ -53,7 +53,35 @@ class _SpeedPageState extends State<SpeedPage> {
   /// Zuletzt vom Bewegungssensor gemeldeter Stillstands-Status. null,
   /// solange noch keine Messung vorliegt bzw. kein Sensor verfügbar ist -
   /// in diesem Fall wird ausschließlich der GPS-Rohwert verwendet.
-  bool? _isStationary;
+  bool? get _isStationary => widget.status.sensorStationary;
+
+  /// Zuletzt verarbeiteter Sensorzustand - verhindert, dass die eigenen
+  /// Rückmeldungen an den Statusbereich (siehe _reportStationary) hier
+  /// erneut eine Verarbeitung auslösen.
+  bool? _lastSensorStationary;
+
+  void _onStatusChanged() {
+    final sensor = widget.status.sensorStationary;
+    if (sensor == _lastSensorStationary) return;
+    _lastSensorStationary = sensor;
+    if (!mounted) return;
+    setState(() {});
+    _reportStationary();
+  }
+
+  /// Kombinierter Stillstand der Tacho-Seite (Sensor UND GPS-Rohwert unter
+  /// der Schwelle) - null ohne GPS-Messung.
+  bool _isStationaryOverride(SpeedReading reading) {
+    final rawKmh = SpeedUnit.kilometersPerHour.fromMetersPerSecond(reading.speedMetersPerSecond);
+    return _isStationary == true && rawKmh < _stationaryOverrideThresholdKmh;
+  }
+
+  void _reportStationary() {
+    final reading = _latestReading;
+    widget.status.reportSpeedPageStationary(
+      reading == null ? null : _isStationaryOverride(reading),
+    );
+  }
 
   /// Unterhalb dieser GPS-Rohgeschwindigkeit (km/h) wird ein vom
   /// Bewegungssensor bestätigter Stillstand als "echte Null" gewertet
@@ -69,10 +97,8 @@ class _SpeedPageState extends State<SpeedPage> {
     // nicht durch den automatischen Bildschirm-Sperrbildschirm verdeckt
     // werden). Wird beim Verlassen der Seite in dispose() wieder aufgehoben.
     WakelockPlus.enable();
-    _motionSubscription = _motionService.isStationaryStream().listen((stationary) {
-      if (!mounted) return;
-      setState(() => _isStationary = stationary);
-    });
+    _lastSensorStationary = widget.status.sensorStationary;
+    widget.status.addListener(_onStatusChanged);
     _initialize();
   }
 
@@ -92,17 +118,11 @@ class _SpeedPageState extends State<SpeedPage> {
           _latestReading = reading;
           _measurementTick++;
         });
+        _reportStationary();
       },
       onError: (Object error) {
         if (!mounted) return;
         setState(() => _availability = LocationAvailability.serviceDisabled);
-      },
-    );
-
-    _satelliteSubscription = _satelliteService.satelliteCountStream().listen(
-      (count) {
-        if (!mounted) return;
-        setState(() => _satelliteCount = count);
       },
     );
   }
@@ -110,13 +130,15 @@ class _SpeedPageState extends State<SpeedPage> {
   @override
   void dispose() {
     _speedSubscription?.cancel();
-    _satelliteSubscription?.cancel();
-    _motionSubscription?.cancel();
+    widget.status.removeListener(_onStatusChanged);
+    // Verzögert, da dispose() mitten im Neuaufbau des Widget-Baums läuft -
+    // ein sofortiges Benachrichtigen der Statusleiste wäre dort unzulässig.
+    final status = widget.status;
+    scheduleMicrotask(() => status.reportSpeedPageStationary(null));
     // Stoppt zuverlässig den GPS-Empfang, sobald die Seite verlassen wird
     // (siehe HomeShell - Seiten werden bewusst nicht per IndexedStack im
     // Hintergrund weiterlaufen gelassen, sondern bei Tab-Wechsel disposed).
     unawaited(_speedService.dispose());
-    unawaited(_motionService.dispose());
     // Bildschirm darf wieder automatisch sperren, sobald die Tacho-Seite
     // verlassen wird.
     WakelockPlus.disable();
@@ -225,11 +247,7 @@ class _SpeedPageState extends State<SpeedPage> {
     // eine "echte Null" korrigiert - das unterdrückt das für ruhende
     // Geräte typische GPS-Rauschen, ohne eine tatsächliche (schnelle)
     // Fahrt jemals fälschlich auf 0 zu setzen.
-    final rawSpeedKmh =
-        reading != null ? SpeedUnit.kilometersPerHour.fromMetersPerSecond(reading.speedMetersPerSecond) : 0.0;
-    final stationaryOverrideActive = reading != null &&
-        _isStationary == true &&
-        rawSpeedKmh < _stationaryOverrideThresholdKmh;
+    final stationaryOverrideActive = reading != null && _isStationaryOverride(reading);
     final effectiveSpeedMs =
         stationaryOverrideActive ? 0.0 : reading?.speedMetersPerSecond;
 
@@ -261,7 +279,7 @@ class _SpeedPageState extends State<SpeedPage> {
 
     final analog = widget.preferences.speedDisplayStyle == SpeedDisplayStyle.analog;
 
-    return Column(
+    final column = Column(
       children: [
         // Die Geschwindigkeit nimmt bewusst den mit Abstand größten Teil
         // des verfügbaren Platzes ein. Die Einheit steht bewusst UNTER
@@ -294,49 +312,110 @@ class _SpeedPageState extends State<SpeedPage> {
             ),
           ),
         const SizedBox(height: 12),
-        AutoHyphenatingText(
-          SpeedFormatter.formatAccuracy(accuracyDisplayValue, unit),
-          style: _readableInfoStyle(context),
+        // Seitlicher Abstand hält die Genauigkeitszeile frei vom Knopf
+        // unten rechts (siehe unten); FittedBox verkleinert sie nur, falls
+        // der Platz dafür nicht reicht - wie auf der Kompass-Seite.
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 56),
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: AutoHyphenatingText(
+              SpeedFormatter.formatAccuracy(accuracyDisplayValue, unit),
+              style: _readableInfoStyle(context),
+            ),
+          ),
         ),
-        const SizedBox(height: 4),
-        AutoHyphenatingText(
-          _satelliteCount != null
-              ? 'Satelliten (Fix): $_satelliteCount'
-              : 'Satelliten: nicht verfügbar',
-          style: _readableInfoStyle(context),
+        const SizedBox(height: 8),
+      ],
+    );
+
+    // NEU: Anzeigeeinheit und Skalenende liegen nicht mehr als breite
+    // Auswahl unter dem Instrument, sondern hinter einem kleinen Knopf
+    // unten rechts - das Instrument bekommt dadurch mehr Platz.
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        column,
+        Positioned(
+          right: 0,
+          bottom: 0,
+          child: FloatingActionButton.small(
+            heroTag: null,
+            tooltip: 'Einheit und Skala',
+            onPressed: _showUnitSheet,
+            child: const Icon(Icons.tune),
+          ),
         ),
-        const SizedBox(height: 4),
-        // Diese Zeile ist bewusst IMMER sichtbar (nicht nur bei aktiver
-        // Korrektur) und zeigt sonst "-" an, statt komplett zu
-        // verschwinden - ein ständig erscheinendes/verschwindendes
-        // Element an dieser Stelle wirkte zusätzlich zum eigentlichen
-        // Flackern der Geschwindigkeitsanzeige selbst wie ein zweites,
-        // unabhängiges Flackern des Layouts.
-        AutoHyphenatingText(
-          stationaryOverrideActive ? 'Stillstand erkannt - Anzeige auf 0 korrigiert' : 'Messung aktiv',
-          style: _readableInfoStyle(context)?.copyWith(fontStyle: FontStyle.italic),
-        ),
-        const SizedBox(height: 24),
-        _buildUnitSelector(context, unit),
-        if (analog) ...[
-          const SizedBox(height: 12),
-          _buildScaleSelector(context, unit),
-        ],
       ],
     );
   }
 
-  /// Textstil für die drei Info-Zeilen unterhalb der Einheiten-Angabe
-  /// (Genauigkeit, Satellitenanzahl, Stillstands-/Messungs-Status) - auf
-  /// Wunsch etwa doppelt so groß wie das normale bodySmall, damit sie
-  /// auch während der Fahrt (z. B. im Randbereich des Blickfelds) gut
-  /// lesbar sind.
-  TextStyle? _readableInfoStyle(BuildContext context) {
-    final base = Theme.of(context).textTheme.bodySmall;
-    final baseFontSize = base?.fontSize;
-    if (base == null || baseFontSize == null) return base;
-    return base.copyWith(fontSize: baseFontSize * 2);
+  /// Öffnet die Vorwahl für Anzeigeeinheit und - nur bei analoger
+  /// Darstellung - das Skalenende der gerade gewählten Einheit. Die
+  /// Änderungen wirken sofort im Hintergrund; ListenableBuilder baut das
+  /// Fenster bei einem Einheitenwechsel mit den passenden Skalenstufen neu
+  /// auf.
+  void _showUnitSheet() {
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: ListenableBuilder(
+          listenable: widget.preferences,
+          builder: (context, _) {
+            final unit = widget.preferences.speedUnit;
+            final analog = widget.preferences.speedDisplayStyle == SpeedDisplayStyle.analog;
+            return Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _buildUnitSelector(context, unit),
+                  if (analog) ...[
+                    const SizedBox(height: 20),
+                    _buildScaleSelector(context, unit),
+                  ],
+                ],
+              ),
+            );
+          },
+        ),
+      ),
+    );
   }
+
+  /// Auswahl des Skalenendes für den analogen Tacho - die Segmente richten
+  /// sich nach der gewählten Einheit (siehe SpeedScale), jede Einheit
+  /// behält ihre eigene letzte Wahl (AppPreferences.speedScaleMax).
+  /// Normales Text statt AutoHyphenatingText (siehe README Abschnitt 13).
+  Widget _buildScaleSelector(BuildContext context, SpeedUnit unit) {
+    return Column(
+      children: [
+        AutoHyphenatingText(
+          'Skalenende (${unit.symbol})',
+          style: Theme.of(context).textTheme.labelLarge,
+        ),
+        const SizedBox(height: 8),
+        SizedBox(
+          width: double.infinity,
+          child: SegmentedButton<int>(
+            segments: [
+              for (final value in SpeedScale.optionsFor(unit))
+                ButtonSegment(value: value, label: Text('$value')),
+            ],
+            selected: {widget.preferences.speedScaleMax(unit)},
+            onSelectionChanged: (selection) {
+              widget.preferences.setSpeedScaleMax(unit, selection.first);
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Textstil der Genauigkeitszeile - einheitlich für alle Seiten (siehe
+  /// widgets/accuracy_text_style.dart).
+  TextStyle? _readableInfoStyle(BuildContext context) => accuracyTextStyle(context);
 
   /// Baut die Geschwindigkeitsanzeige aus dem Vorkommateil (normale
   /// Sieben-Segment-Größe) und - sofern vorhanden - der einen
@@ -365,35 +444,6 @@ class _SpeedPageState extends State<SpeedPage> {
     );
   }
 
-  /// NEU: Auswahl des Skalenendes für den analogen Tacho. Die Segmente
-  /// richten sich nach der gewählten Einheit (siehe SpeedScale), jede
-  /// Einheit behält ihre eigene letzte Wahl (AppPreferences.speedScaleMax).
-  /// Normales Text statt AutoHyphenatingText (siehe README Abschnitt 13).
-  Widget _buildScaleSelector(BuildContext context, SpeedUnit unit) {
-    return Column(
-      children: [
-        AutoHyphenatingText(
-          'Skalenende (${unit.symbol})',
-          style: Theme.of(context).textTheme.labelLarge,
-        ),
-        const SizedBox(height: 8),
-        SizedBox(
-          width: double.infinity,
-          child: SegmentedButton<int>(
-            segments: [
-              for (final value in SpeedScale.optionsFor(unit))
-                ButtonSegment(value: value, label: Text('$value')),
-            ],
-            selected: {widget.preferences.speedScaleMax(unit)},
-            onSelectionChanged: (selection) {
-              widget.preferences.setSpeedScaleMax(unit, selection.first);
-            },
-          ),
-        ),
-      ],
-    );
-  }
-
   Widget _buildUnitSelector(BuildContext context, SpeedUnit selected) {
     return Column(
       children: [
@@ -410,29 +460,38 @@ class _SpeedPageState extends State<SpeedPage> {
             segments: [
               ButtonSegment(
                 value: SpeedUnit.metersPerSecond,
-                // Bewusst normales Text-Widget statt AutoHyphenatingText:
-                // Letzteres nutzt intern einen LayoutBuilder zur
-                // Breitenmessung, SegmentedButton muss für gleich breite
-                // Segmente aber die intrinsische Breite seiner Labels
-                // berechnen - das verträgt sich technisch nicht mit einem
-                // LayoutBuilder als Kind ("LayoutBuilder does not support
-                // returning intrinsic dimensions"). Bei den hier sehr
-                // kurzen Einheiten-Symbolen (m/s, km/h, kn) wird ohnehin
-                // nie umgebrochen, Silbentrennung wäre wirkungslos.
-                label: Text(SpeedUnit.metersPerSecond.symbol),
-                icon: const Icon(Icons.person),
+                // Normales Text statt AutoHyphenatingText (siehe
+                // StackedSegmentLabel/README Abschnitt 13); das Symbol
+                // steht OBERHALB des Textes, damit dieser auch auf
+                // schmalen Displays einzeilig bleibt.
+                label: StackedSegmentLabel(
+                  icon: Icons.person,
+                  text: SpeedUnit.metersPerSecond.symbol,
+                ),
               ),
               ButtonSegment(
                 value: SpeedUnit.kilometersPerHour,
-                label: Text(SpeedUnit.kilometersPerHour.symbol),
-                icon: const Icon(Icons.directions_car),
+                label: StackedSegmentLabel(
+                  icon: Icons.directions_car,
+                  text: SpeedUnit.kilometersPerHour.symbol,
+                ),
+              ),
+              ButtonSegment(
+                value: SpeedUnit.milesPerHour,
+                label: StackedSegmentLabel(
+                  icon: Icons.speed,
+                  text: SpeedUnit.milesPerHour.symbol,
+                ),
               ),
               ButtonSegment(
                 value: SpeedUnit.knots,
-                label: Text(SpeedUnit.knots.symbol),
-                icon: const Icon(Icons.sailing),
+                label: StackedSegmentLabel(
+                  icon: Icons.sailing,
+                  text: SpeedUnit.knots.symbol,
+                ),
               ),
             ],
+            showSelectedIcon: false,
             selected: {selected},
             onSelectionChanged: (selection) {
               widget.preferences.setSpeedUnit(selection.first);

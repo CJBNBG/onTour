@@ -12,6 +12,8 @@ import 'info_page.dart';
 import 'settings_page.dart';
 import 'speed_page.dart';
 import 'track_page.dart';
+import '../services/device_status_service.dart';
+import 'widgets/app_status_bar.dart';
 
 /// Rahmen der App: obere App-Leiste (mit Seitentitel und Info-Button) sowie
 /// untere Navigationsleiste zum Wechseln zwischen den vier
@@ -75,6 +77,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
   // Siehe Klassenkommentar: lebt bewusst so lange wie HomeShell selbst,
   // nicht nur so lange wie die jeweils sichtbare TrackPage.
   final TrackRecordingService _trackRecordingService = TrackRecordingService();
+  final DeviceStatusService _deviceStatus = DeviceStatusService();
 
   /// NEU (siehe README Abschnitt 47): Luftdruck-Verlauf für den
   /// 3-Stunden-Trend - lebt wie der TrackRecordingService bewusst so lange
@@ -91,6 +94,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
+    _deviceStatus.start();
     WidgetsBinding.instance.addObserver(this);
     // NEU (README Abschnitt 47): Startet die fortlaufende Luftdruck-
     // Aufzeichnung (lädt zuvor einen ggf. gesicherten Verlauf).
@@ -114,8 +118,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
   Future<void> _checkPendingNavigation() async {
     bool shouldOpenTrackTab;
     try {
-      shouldOpenTrackTab =
-          await _navigationChannel.invokeMethod<bool>('consumePendingOpenTrackTab') ?? false;
+      shouldOpenTrackTab = await _navigationChannel.invokeMethod<bool>('consumePendingOpenTrackTab') ?? false;
     } catch (_) {
       // Reiner Komfort-Zusatz (siehe Abschnitt 23) - ein Fehlschlag (z. B.
       // auf einer Plattform ohne die native Implementierung) darf die
@@ -134,6 +137,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     // endgueltig geschlossen werden - siehe TrackRecordingService.dispose.
     unawaited(_trackRecordingService.dispose());
     unawaited(_pressureTrendService.dispose());
+    _deviceStatus.dispose();
     super.dispose();
   }
 
@@ -157,7 +161,12 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
           ),
         ],
       ),
-      body: _buildPage(_selectedIndex),
+      body: Column(
+        children: [
+          AppStatusBar(status: _deviceStatus),
+          Expanded(child: _buildPage(_selectedIndex)),
+        ],
+      ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _selectedIndex,
         onDestinationSelected: (index) => setState(() => _selectedIndex = index),
@@ -174,7 +183,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
   Widget _buildPage(int index) {
     switch (index) {
       case 0:
-        return SpeedPage(preferences: widget.preferences);
+        return SpeedPage(preferences: widget.preferences, status: _deviceStatus);
       case 1:
         return CompassPage(
           preferences: widget.preferences,

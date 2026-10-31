@@ -105,7 +105,7 @@ class _TrackPageState extends State<TrackPage> with SingleTickerProviderStateMix
   /// NorthLockButton fuer die genaue Bedeutung. Bewusst NICHT persistiert
   /// (siehe README Abschnitt 5), startet also bei jedem Seitenaufruf neu
   /// im freien, drehbaren Ausgangszustand.
-  bool _northLocked = false;
+  bool _northLocked = true;
 
   /// NEU (siehe README Abschnitt 37): Letzte bekannte Punktezahl - dient
   /// [_recordingSubscription] dazu, einen NEUEN Punkt (statt irgendeine

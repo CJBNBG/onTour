@@ -20,6 +20,7 @@ import 'compass_calibration_page.dart';
 import 'widgets/accuracy_badge.dart';
 import 'widgets/compass_dial.dart';
 import 'widgets/measurement_pulse_indicator.dart';
+import 'widgets/accuracy_text_style.dart';
 
 /// Zeigt die aktuelle Peilung (Himmelsrichtung) des Geräts, die aktuelle
 /// Höhe sowie die aktuelle Position an - Letztere in einem der vier
@@ -74,10 +75,7 @@ class _CompassPageState extends State<CompassPage> {
   void _maybeUpdateDeclination(AltitudeReading reading) {
     final lat = _declinationLat;
     final lon = _declinationLon;
-    final needsUpdate = lat == null ||
-        lon == null ||
-        (reading.latitude - lat).abs() > _declinationRefreshDegrees ||
-        (reading.longitude - lon).abs() > _declinationRefreshDegrees;
+    final needsUpdate = lat == null || lon == null || (reading.latitude - lat).abs() > _declinationRefreshDegrees || (reading.longitude - lon).abs() > _declinationRefreshDegrees;
     if (!needsUpdate) return;
     _declinationLat = reading.latitude;
     _declinationLon = reading.longitude;
@@ -258,14 +256,15 @@ class _CompassPageState extends State<CompassPage> {
   /// Textstil für Genauigkeitsangaben (Kurs, Höhe UND Position) - zwei
   /// Drittel der Schriftgröße der jeweils zugehörigen Hauptangabe
   /// (displaySmall), klar untergeordnet, aber gut lesbar.
-  TextStyle? _accuracyStyle(BuildContext context) {
-    final base = Theme.of(context).textTheme.displaySmall;
-    final baseFontSize = base?.fontSize;
-    if (base == null || baseFontSize == null) {
-      return Theme.of(context).textTheme.bodySmall;
-    }
-    return base.copyWith(fontSize: baseFontSize * 2 / 3);
-  }
+  // TextStyle? _accuracyStyle(BuildContext context) {
+  //   final base = Theme.of(context).textTheme.displaySmall;
+  //   final baseFontSize = base?.fontSize;
+  //   if (base == null || baseFontSize == null) {
+  //     return Theme.of(context).textTheme.bodySmall;
+  //   }
+  //   return base.copyWith(fontSize: baseFontSize * 2 / 3);
+  // }
+  TextStyle? _accuracyStyle(BuildContext context) => accuracyTextStyle(context);
 
   /// Positionszeilen im aktuell gewählten Format (siehe README Abschnitt
   /// 25, [PositionDisplayFormat]) - GENAU EINE Zeile bei UTM, sonst ZWEI
@@ -276,9 +275,7 @@ class _CompassPageState extends State<CompassPage> {
     final reading = _altitudeReading;
     final format = widget.preferences.positionDisplayFormat;
     if (reading == null) {
-      return format == PositionDisplayFormat.utm
-          ? const ['Position: nicht verfügbar']
-          : const ['Breite: nicht verfügbar', 'Länge: nicht verfügbar'];
+      return format == PositionDisplayFormat.utm ? const ['Position: nicht verfügbar'] : const ['Breite: nicht verfügbar', 'Länge: nicht verfügbar'];
     }
     return CoordinateFormatter.formatPosition(reading.latitude, reading.longitude, format);
   }
@@ -361,16 +358,12 @@ class _CompassPageState extends State<CompassPage> {
                   const minDialSize = 120.0;
                   const maxDialSize = 360.0;
                   const maxWidthFraction = 0.8;
-                  final dialSize =
-                      math.min(availableWidth * maxWidthFraction, availableHeight * 0.48)
-                          .clamp(minDialSize, maxDialSize)
-                          .toDouble();
+                  final dialSize = math.min(availableWidth * maxWidthFraction, availableHeight * 0.48).clamp(minDialSize, maxDialSize).toDouble();
 
                   // Rest der Höhe (abzüglich eines kleinen Mindestabstands)
                   // steht dem Textblock zur Verfügung.
                   const gap = 16.0;
-                  final textBlockMaxHeight =
-                      (availableHeight - dialSize - gap).clamp(60.0, availableHeight).toDouble();
+                  final textBlockMaxHeight = (availableHeight - dialSize - gap).clamp(60.0, availableHeight).toDouble();
 
                   return Stack(
                     children: [
