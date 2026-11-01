@@ -55,27 +55,37 @@ class AnalogSpeedGauge extends StatelessWidget {
                       needleColor: const Color(0xFFE53935),
                     ),
                   ),
+                  // Einheit oben, Zahlenwert darunter: Der Wert sitzt so im
+                  // unteren, offenen Bereich der 270°-Skala und hat dort
+                  // auch bei dreistelligen Zahlen (z. B. "123,4") genug
+                  // Breite. FittedBox verkleinert ihn im Notfall.
                   Align(
-                    alignment: const Alignment(0, 0.62),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          valueText,
-                          style: TextStyle(
-                            fontSize: size * 0.13,
-                            fontWeight: FontWeight.bold,
-                            color: scheme.onSurface,
-                          ),
+                    alignment: const Alignment(0, 0.70),
+                    child: SizedBox(
+                      width: size * 0.62,
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              unitSymbol,
+                              style: TextStyle(
+                                fontSize: size * 0.07,
+                                color: scheme.onSurfaceVariant,
+                              ),
+                            ),
+                            Text(
+                              valueText,
+                              style: TextStyle(
+                                fontSize: size * 0.13,
+                                fontWeight: FontWeight.bold,
+                                color: scheme.onSurface,
+                              ),
+                            ),
+                          ],
                         ),
-                        Text(
-                          unitSymbol,
-                          style: TextStyle(
-                            fontSize: size * 0.07,
-                            color: scheme.onSurfaceVariant,
-                          ),
-                        ),
-                      ],
+                      ),
                     ),
                   ),
                 ],

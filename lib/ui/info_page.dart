@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../models/map_style.dart';
+//import '../models/route_overlay.dart';
 import '../services/diagnostic_log_service.dart';
 
 /// Info-Seite: Programmautor, App-Name, App-Version sowie ein Zugang zur
@@ -24,8 +26,7 @@ class _InfoPageState extends State<InfoPage> {
   /// eingetragen ist: Dann wird der Button gar nicht erst angezeigt.
   /// Format z. B. 'https://play.google.com/store/apps/dev?id=1234567890123456789'
   /// bzw. 'https://play.google.com/store/apps/developer?id=Name'.
-  static const _playStoreDeveloperUrl =
-      'https://play.google.com/store/apps/developer?id=CJBNBG';
+  static const _playStoreDeveloperUrl = 'https://play.google.com/store/apps/developer?id=CJBNBG';
 
   Future<void> _openPlayStoreDeveloperPage() async {
     var opened = false;
@@ -121,9 +122,7 @@ class _InfoPageState extends State<InfoPage> {
             ),
             const SizedBox(height: 4),
             AutoHyphenatingText(
-              info != null
-                  ? 'Version ${info.version} (Build ${info.buildNumber})'
-                  : 'Version wird geladen …',
+              info != null ? 'Version ${info.version} (Build ${info.buildNumber})' : 'Version wird geladen …',
               textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.bodyMedium,
             ),
@@ -165,6 +164,29 @@ class _InfoPageState extends State<InfoPage> {
               ),
               icon: const Icon(Icons.description_outlined),
               label: AutoHyphenatingText('Verwendete Module'),
+            ),
+            // NEU (README Abschnitt 51): Kartenquellen und Lizenzen - u. a.
+            // Voraussetzung der Lizenz der Reit- und Wanderkarte.
+            const SizedBox(height: 24),
+            const Divider(),
+            const SizedBox(height: 16),
+            AutoHyphenatingText('Kartenmaterial', style: Theme.of(context).textTheme.titleSmall),
+            const SizedBox(height: 8),
+            for (final style in MapStyle.values) ...[
+              AutoHyphenatingText(style.label, style: Theme.of(context).textTheme.labelLarge),
+              const SizedBox(height: 2),
+              AutoHyphenatingText(style.creditsLine, style: Theme.of(context).textTheme.bodySmall),
+              const SizedBox(height: 10),
+            ],
+            AutoHyphenatingText(
+              'Wander- und Radrouten (optionales Overlay): Waymarked Trails '
+              '(waymarkedtrails.org, Sarah Hoffmann), CC-BY-SA.',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            const SizedBox(height: 10),
+            AutoHyphenatingText(
+              'Seemarken (optionales Overlay): © OpenSeaMap-Mitwirkende.',
+              style: Theme.of(context).textTheme.bodySmall,
             ),
             // NEU (siehe README Abschnitt 31): Nur sichtbar, wenn
             // tatsächlich eine Diagnose-Log-Datei existiert - das ist nur

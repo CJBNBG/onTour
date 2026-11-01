@@ -271,8 +271,16 @@ class TrackRecordingService {
   /// als die Pausenschwelle (Hysterese) - wird eine automatische Pause
   /// aufgehoben, aber erst nach [_gpsResumeConfirmations] aufeinander-
   /// folgenden Messwerten (GPS-Ausreisser im Stand).
-  static const double _gpsResumeMinSpeedMs = 1.0;
+  static const double _gpsResumeMinSpeedMs = 0.8;
   static const int _gpsResumeConfirmations = 2;
+
+  /// Schneller Weg zum Fortsetzen: Bei distanceFilter 3 m trifft der erste
+  /// Punkt nach dem Anfahren erst nach 3 m ein, der zweite nach weiteren 3 m
+  /// - die doppelte Bestaetigung kostete daher spuerbar Zeit. Zeigt schon
+  /// ein EINZELNER Punkt mindestens diese Geschwindigkeit (1,5 m/s =
+  /// 5,4 km/h, im Stand durch GPS-Rauschen praktisch nicht erreichbar),
+  /// wird sofort fortgesetzt.
+  static const double _gpsResumeFastSpeedMs = 1.5;
 
   Timer? _standstillTimer;
   DateTime? _gpsStandstillSince;
@@ -672,7 +680,8 @@ class TrackRecordingService {
     if (_state == RecordingState.paused && _autoPaused) {
       if (validSpeed != null && validSpeed >= _gpsResumeMinSpeedMs) {
         _resumeSpeedStreak++;
-        if (_resumeSpeedStreak >= _gpsResumeConfirmations) {
+        if (validSpeed >= _gpsResumeFastSpeedMs ||
+            _resumeSpeedStreak >= _gpsResumeConfirmations) {
           _resumeSpeedStreak = 0;
           unawaited(DiagnosticLogService.instance.log(
             'Automatisches Fortsetzen durch GPS-Geschwindigkeit '

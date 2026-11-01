@@ -342,6 +342,10 @@ class _SpeedPageState extends State<SpeedPage> {
           child: FloatingActionButton.small(
             heroTag: null,
             tooltip: 'Einheit und Skala',
+            // App-Farbe (Teal, aus dem colorSchemeSeed des Themes) statt der
+            // Standardfarbe primaryContainer.
+            backgroundColor: Theme.of(context).colorScheme.primary,
+            foregroundColor: Theme.of(context).colorScheme.onPrimary,
             onPressed: _showUnitSheet,
             child: const Icon(Icons.tune),
           ),

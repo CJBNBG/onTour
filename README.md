@@ -2701,6 +2701,160 @@ Bild springt.
 - `lib/services/app_preferences.dart` (`destination`, `setDestination`)
 - `lib/ui/track_page.dart` (Lupe, Zielkarte, Marker, langes Drücken)
 
+## 51. Wählbare Basiskarten und Karten-Einstellungen
+
+Neben der Standard-OSM-Karte stehen jetzt zwei Wanderkarten zur Wahl
+(`models/map_style.dart`, `MapStyle`): **OpenTopoMap-R** (openmaps.fr,
+`https://tile.openmaps.fr/opentopomap/{z}/{x}/{y}.png`) und die **Reit- und
+Wanderkarte** (`https://topo.wanderreitkarte.de/topo/{z}/{x}/{y}.png`).
+Das Seemarken-Overlay (Abschnitt 9) bleibt ein eigener Schalter und lässt
+sich über jede Basiskarte legen.
+
+**Bedienung:** Der frühere Landkarte/Seekarte-Button (`NauticalModeButton`)
+auf Track-Seite und Track-Detailansicht ist durch den Karten-Button
+(`widgets/map_style_button.dart`, Symbol "Ebenen") ersetzt - er öffnet ein
+Auswahlfenster mit den drei Basiskarten und dem Seemarken-Schalter. Dieselbe
+Auswahl gibt es unter Einstellungen → Karten (neuer dritter Unterreiter,
+zwischen "Anzeige" und "Erweitert"), dort zusätzlich mit Quellen und
+Nutzungshinweisen je Anbieter. Gespeichert wird beides über dieselben Werte
+in `AppPreferences` (`mapStyle`, `mapNauticalMode`); der bisherige
+Seekarten-Wert bleibt unverändert gültig. `widgets/nautical_mode_button.dart`
+wird nicht mehr verwendet und kann gelöscht werden.
+
+**Quellenangabe (Lizenzvoraussetzung):** Die Reit- und Wanderkarte steht
+unter CC-BY-NC-SA und verlangt mindestens den Text "Reit- und Wanderkarte"
+mit Link auf www.wanderreitkarte.de sowie einen Lizenzhinweis. Bei dieser
+Karte wird die Angabe deshalb DAUERHAFT sichtbar am unteren rechten Kartenrand
+angezeigt (antippbar, `MapStyle.alwaysVisibleAttribution`); die Statuskarte
+der Track-Aufzeichnung rückt dafür etwas nach oben. Bei den anderen Karten
+bleibt es beim aufklappbaren Info-Symbol. Zusätzlich führt die Info-Seite
+einen Abschnitt "Kartenmaterial" mit allen Quellen.
+
+**Nutzungsbedingungen (Kurzfassung, Details in den Einstellungen):**
+- Reit- und Wanderkarte: nur kostenlos und nicht-kommerziell; von
+  werbefinanzierten/gewerblichen Angeboten wird eine Beteiligung an den
+  Serverkosten erwartet; Limit 40.000 Kacheln pro Tag (bei Überschreitung 24
+  Stunden Sperre, ein IP-Wechsel zur Umgehung ist untersagt), kein
+  Massen-Download. Vor der Veröffentlichung im Play Store sollte der Betreiber
+  kurz kontaktiert werden.
+- OpenTopoMap-R: kostenlos für nicht-kommerzielle Projekte; festes Limit
+  500.000 Kacheln pro Monat (darüber Einschränkung), kein Massen-Download,
+  Zugriff kann ohne Vorankündigung gesperrt werden. Die Policy verlangt eine
+  OHNE Antippen sichtbare Quellenangabe (Stil, Spendenlink, OpenStreetMap) -
+  deshalb wie bei der Reit- und Wanderkarte dauerhaft angezeigt.
+- Alle Karten: https (Android blockiert unverschlüsselten Verkehr
+  standardmäßig). Die in der Anleitung des Betreibers genannte
+  `http://`-Adresse der Reit- und Wanderkarte wurde deshalb auf `https://`
+  umgestellt - funktioniert der Abruf nicht, ist ein Ausnahmeeintrag per
+  `networkSecurityConfig` für `topo.wanderreitkarte.de` nötig.
+
+**Fehlerkorrektur - User-Agent:** openmaps.fr lieferte zunächst statt
+Kacheln das Bild "Limited Access ... does not respect our Usage Policy
+regarding User-Agent". Ursache: flutter_map sendet über
+`userAgentPackageName` den Wert "flutter_map (de.clausjbauer.ontour)" - die
+Policy verlangt aber einen die ANWENDUNG benennenden Wert und lehnt
+Bibliotheks-Standardwerte ab. `buildMapTileLayers` setzt deshalb für alle
+Kachelebenen den Header `User-Agent: onTour/1.0 (de.clausjbauer.ontour)`
+(`NetworkTileProvider(headers: ...)`). Falls weiterhin die Fehlerkacheln
+erscheinen, liegen sie evtl. noch im Kachel-Cache: App-Daten löschen bzw.
+App neu installieren.
+
+**Zu prüfen auf dem Gerät:** `MapStyle.maxNativeZoom` ist für beide
+Wanderkarten vorsichtig auf 17 gesetzt (darüber werden Kacheln nur
+vergrößert, nie leer). Liefert ein Server höhere Stufen, kann der Wert
+angehoben werden.
+
+**Betroffene/neue Dateien:**
+- `lib/models/map_style.dart` (NEU)
+- `lib/util/external_link.dart` (NEU)
+- `lib/ui/widgets/map_style_button.dart` (NEU)
+- `lib/ui/widgets/map_tile_layers.dart` (Basiskarte, Attribution)
+- `lib/services/app_preferences.dart` (`mapStyle`)
+- `lib/ui/track_page.dart`, `lib/ui/track_detail_page.dart`
+- `lib/ui/settings_page.dart` (Unterreiter "Karten")
+- `lib/ui/info_page.dart` (Abschnitt "Kartenmaterial")
+
+## 52. Weitere Basiskarten (TopPlusOpen, CyclOSM) und Routen-Overlay (Waymarked Trails)
+
+Erweitert die Kartenauswahl aus Abschnitt 51. Die App spricht ausdrücklich
+auch Radfahrer an.
+
+**Neue Basiskarten (`MapStyle`):**
+- **TopPlusOpen** (Bundesamt für Kartographie und Geodäsie, BKG): amtliche,
+  ruhige Referenzkarte, kein Schlüssel. URL
+  `https://sgx.geodatenzentrum.de/wmts_topplus_open/tile/1.0.0/web/default/WEBMERCATOR/{z}/{y}/{x}.png`
+  - ACHTUNG: Reihenfolge `{z}/{y}/{x}`. Bedingung: deutlich sichtbarer
+  Quellenvermerk "© BKG (Jahr des letzten Datenbezugs) dl-de/by-2-0,
+  Datenquellen: (Link)" - wird dauerhaft angezeigt. **Das Jahr in
+  `map_style.dart` (aktuell 2026) sollte jährlich geprüft werden.** Die
+  Karte zeigt weder Wanderwege noch Höhenlinien.
+- **CyclOSM** (OpenStreetMap-France):
+  `https://a.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png`, es gilt
+  die allgemeine OSM-Tile-Usage-Policy ("fair use").
+
+**Routen-Overlay (`models/route_overlay.dart`, `RouteOverlay`):** Aus,
+Wanderrouten oder Radrouten (`https://tile.waymarkedtrails.org/hiking|cycling/{z}/{x}/{y}.png`,
+Waymarked Trails, CC-BY-SA). Die drei Zustände schließen sich gegenseitig
+aus; das Seemarken-Overlay bleibt davon unabhängig. Gespeichert über
+`AppPreferences.routeOverlay`. **Nutzungsbedingungen von Waymarked Trails
+konnte ich nicht abschließend prüfen** (keine Policy gefunden) - Quellenangabe
+ist erforderlich (Layer wird in der Quellenangabe der Karte genannt), bei
+größerer Nutzerzahl den Betreiber kontaktieren.
+
+**Bedienung:** Karten-Button (Abschnitt 51) und Einstellungen → Karten
+enthalten jetzt fünf Basiskarten, die Routen-Auswahl und den
+Seemarken-Schalter; die Quellenkarten in den Einstellungen und der Abschnitt
+"Kartenmaterial" der Info-Seite führen auch die Overlays. Die Statuskarte der
+Track-Aufzeichnung rückt bei dauerhaft sichtbarer Quellenangabe mit
+zusätzlichem Overlay etwas weiter nach oben (längere Quellenzeile).
+
+**Zu prüfen auf dem Gerät:** Lesbarkeit der (dann ggf. zweizeiligen)
+Quellenangabe auf kleinen Displays; Darstellung der Routenlinien über
+OpenTopoMap-R und der Reit- und Wanderkarte (die bereits eigene Wanderwege
+zeigen); höchste Zoomstufen der neuen Karten.
+
+**Betroffene/neue Dateien:**
+- `lib/models/route_overlay.dart` (NEU)
+- `lib/models/map_style.dart` (TopPlusOpen, CyclOSM)
+- `lib/services/app_preferences.dart` (`routeOverlay`)
+- `lib/ui/widgets/map_tile_layers.dart`, `lib/ui/widgets/map_style_button.dart`
+- `lib/ui/track_page.dart`, `lib/ui/track_detail_page.dart`
+- `lib/ui/settings_page.dart`, `lib/ui/info_page.dart`
+
+## 53. Legende der angezeigten Karte
+
+Neuer Button "Legende" (Symbol `legend_toggle`, `widgets/map_legend_button.dart`)
+auf Track-Seite und Track-Detailansicht, in der LINKEN UNTEREN Ecke der Karte
+(damit die Button-Reihe am rechten Rand kurz bleibt). Bei laufender oder
+pausierter Aufzeichnung sitzt er über der Statuskarte, bei dauerhaft sichtbarer
+Quellenangabe über dieser - die Höhen sind feste Näherungswerte und ggf. auf
+dem Gerät nachzujustieren. Er öffnet ein
+Fenster, das sich nach der AKTUELLEN Auswahl richtet:
+- **Basiskarte:** kurze Hinweise zum Kartenbild (`MapStyle.legendHints`) und
+  ein Button "Vollständige Legende öffnen" (`MapStyle.legendUrl`, öffnet im
+  Browser).
+- **Routen-Overlay** und **Seemarken**, sofern eingeschaltet (eigener
+  Abschnitt mit Hinweis und Link).
+- **Symbole in onTour:** rote Linie (Track), Positions-, Ziel-, Start- und
+  Ende-Symbol - diese Symbole gehören zur App selbst und sind unabhängig von der
+  gewählten Karte.
+
+**Bewusste Grenze:** Die Kartenkacheln kommen als fertige Bilder von
+Fremdanbietern; eine vollständige Zeichenerklärung gibt es nur beim jeweiligen
+Anbieter, und eigene Nachbildungen wären ohne Quelle fehleranfällig. Die App
+zeigt deshalb nur Hinweise, die aus Anbieterdokumentation stammen (z. B.
+Farbbedeutung bei CyclOSM, Wegedarstellung der Reit- und Wanderkarte), und
+verlinkt die vollständige Legende. Für TopPlusOpen und die Waymarked-Trails-
+Overlays habe ich keine eigene Zeichenerklärung gefunden - dort verweist der
+Link auf die Produktbeschreibung bzw. die Webseite des Anbieters. Die Legenden-
+Links können sich ändern (Anbieter-Webseiten).
+
+**Betroffene/neue Dateien:**
+- `lib/ui/widgets/map_legend_button.dart` (NEU)
+- `lib/models/map_style.dart`, `lib/models/route_overlay.dart`
+  (`legendUrl`, `legendHints`)
+- `lib/ui/track_page.dart`, `lib/ui/track_detail_page.dart`
+
 ## Paketinhalt dieser ZIP
 
 `AndroidManifest.xml` liegt unter `native_android/` (Ziel:
@@ -2720,3 +2874,7 @@ unverändert (`sensors_plus` und `path_provider` sind bereits eingebunden).
 (Abschnitt 49) und die Ortssuche (Abschnitt 50) geänderten bzw. neuen Dateien
 sowie diese `README.md`; alle übrigen Dateien bleiben unverändert aus dem
 bestehenden Projekt.
+
+**Diese ZIP (Abschnitte 51 bis 53):** enthält die für die wählbaren Basiskarten neuen
+bzw. geänderten Dateien sowie diese `README.md`; alle übrigen Dateien bleiben
+unverändert aus dem bestehenden Projekt.

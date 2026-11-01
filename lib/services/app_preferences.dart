@@ -3,7 +3,9 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../models/map_style.dart';
 import '../models/place_result.dart';
+import '../models/route_overlay.dart';
 import '../models/position_display_format.dart';
 import '../models/speed_accuracy_mode.dart';
 import '../models/speed_display_style.dart';
@@ -24,6 +26,8 @@ class AppPreferences extends ChangeNotifier {
   static const _speedUnitKey = 'speedUnit';
   static const _speedAccuracyModeKey = 'speedAccuracyMode';
   static const _mapNauticalModeKey = 'mapNauticalMode';
+  static const _mapStyleKey = 'mapStyle';
+  static const _routeOverlayKey = 'routeOverlay';
   static const _autoPauseReminderMinutesKey = 'autoPauseReminderMinutes';
   static const _positionDisplayFormatKey = 'positionDisplayFormat';
   static const _destinationKey = 'destination';
@@ -34,6 +38,8 @@ class AppPreferences extends ChangeNotifier {
   SpeedUnit _speedUnit = SpeedUnit.kilometersPerHour;
   SpeedAccuracyMode _speedAccuracyMode = SpeedAccuracyMode.balanced;
   bool _mapNauticalMode = false;
+  MapStyle _mapStyle = MapStyle.standard;
+  RouteOverlay _routeOverlay = RouteOverlay.none;
   int _autoPauseReminderMinutes = 3;
   PositionDisplayFormat _positionDisplayFormat = PositionDisplayFormat.dms;
   PlaceResult? _destination;
@@ -69,6 +75,15 @@ class AppPreferences extends ChangeNotifier {
   /// widgets/nautical_mode_button.dart).
   bool get mapNauticalMode => _mapNauticalMode;
 
+  /// NEU (siehe README Abschnitt 51): Gewählte Basiskarte (Standard,
+  /// OpenTopoMap-R, Reit- und Wanderkarte). Das Seemarken-Overlay
+  /// ([mapNauticalMode]) lässt sich über jede davon legen.
+  MapStyle get mapStyle => _mapStyle;
+
+  /// NEU (siehe README Abschnitt 52): Gewähltes Routen-Overlay (Wander-/
+  /// Radrouten von Waymarked Trails), Standard: aus.
+  RouteOverlay get routeOverlay => _routeOverlay;
+
   /// Lädt zuvor gespeicherte Einstellungen (falls vorhanden). Muss einmal
   /// beim App-Start aufgerufen werden, bevor runApp() erfolgt bzw. bevor
   /// die erste Anzeige davon abhängt.
@@ -102,6 +117,22 @@ class AppPreferences extends ChangeNotifier {
     final storedMapNauticalMode = prefs.getBool(_mapNauticalModeKey);
     if (storedMapNauticalMode != null) {
       _mapNauticalMode = storedMapNauticalMode;
+    }
+
+    final storedMapStyle = prefs.getString(_mapStyleKey);
+    if (storedMapStyle != null) {
+      _mapStyle = MapStyle.values.firstWhere(
+        (style) => style.name == storedMapStyle,
+        orElse: () => MapStyle.standard,
+      );
+    }
+
+    final storedRouteOverlay = prefs.getString(_routeOverlayKey);
+    if (storedRouteOverlay != null) {
+      _routeOverlay = RouteOverlay.values.firstWhere(
+        (overlay) => overlay.name == storedRouteOverlay,
+        orElse: () => RouteOverlay.none,
+      );
     }
 
     final storedReminderMinutes = prefs.getInt(_autoPauseReminderMinutesKey);
@@ -186,6 +217,20 @@ class AppPreferences extends ChangeNotifier {
     notifyListeners();
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_mapNauticalModeKey, nautical);
+  }
+
+  Future<void> setRouteOverlay(RouteOverlay overlay) async {
+    _routeOverlay = overlay;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_routeOverlayKey, overlay.name);
+  }
+
+  Future<void> setMapStyle(MapStyle style) async {
+    _mapStyle = style;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_mapStyleKey, style.name);
   }
 
   /// HINWEIS: Wirkt sich (analog zu setSpeedAccuracyMode, siehe Abschnitt

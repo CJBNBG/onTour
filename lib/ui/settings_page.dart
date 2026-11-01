@@ -2,12 +2,15 @@ import 'package:auto_hyphenating_text/auto_hyphenating_text.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
+import '../models/map_style.dart';
 import '../models/position_display_format.dart';
+import '../models/route_overlay.dart';
 import '../models/speed_display_style.dart';
 import '../models/speed_accuracy_mode.dart';
 import '../models/speed_scale.dart';
 import '../models/speed_unit.dart';
 import '../services/app_preferences.dart';
+import '../util/external_link.dart';
 import 'widgets/stacked_segment_label.dart';
 
 /// Einstellungsseite, unterteilt in zwei Unterreiter (NEU, siehe README
@@ -36,7 +39,7 @@ class SettingsPage extends StatefulWidget {
 }
 
 class _SettingsPageState extends State<SettingsPage> with SingleTickerProviderStateMixin {
-  late final TabController _tabController = TabController(length: 2, vsync: this);
+  late final TabController _tabController = TabController(length: 3, vsync: this);
 
   /// Obergrenze der Pause-Erinnerung in Minuten (0 = aus).
   static const int _maxReminderMinutes = 120;
@@ -65,6 +68,7 @@ class _SettingsPageState extends State<SettingsPage> with SingleTickerProviderSt
             // (siehe README Abschnitt 13).
             tabs: const [
               Tab(text: 'Anzeige'),
+              Tab(text: 'Karten'),
               Tab(text: 'Erweitert'),
             ],
           ),
@@ -73,6 +77,7 @@ class _SettingsPageState extends State<SettingsPage> with SingleTickerProviderSt
               controller: _tabController,
               children: [
                 _buildDisplayTab(context),
+                _buildMapsTab(context),
                 _buildAdvancedTab(context),
               ],
             ),
@@ -250,6 +255,119 @@ class _SettingsPageState extends State<SettingsPage> with SingleTickerProviderSt
           ),
         ),
       ],
+    );
+  }
+
+  /// NEU (siehe README Abschnitt 51): Unterreiter "Karten" - Basiskarte,
+  /// Seemarken-Overlay sowie Quellen und Nutzungshinweise aller
+  /// Kartenanbieter. Die Auswahl entspricht dem Karten-Button auf der
+  /// Track-Seite (derselbe gespeicherte Wert).
+  Widget _buildMapsTab(BuildContext context) {
+    final theme = Theme.of(context);
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        AutoHyphenatingText('Basiskarte', style: theme.textTheme.titleMedium),
+        const SizedBox(height: 8),
+        RadioGroup<MapStyle>(
+          groupValue: widget.preferences.mapStyle,
+          onChanged: (selected) {
+            if (selected != null) widget.preferences.setMapStyle(selected);
+          },
+          child: Column(
+            children: [
+              for (final style in MapStyle.values)
+                RadioListTile<MapStyle>(
+                  value: style,
+                  title: AutoHyphenatingText(style.label),
+                  subtitle: AutoHyphenatingText(style.description),
+                ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+        AutoHyphenatingText('Routen einblenden', style: theme.textTheme.titleMedium),
+        const SizedBox(height: 8),
+        RadioGroup<RouteOverlay>(
+          groupValue: widget.preferences.routeOverlay,
+          onChanged: (selected) {
+            if (selected != null) widget.preferences.setRouteOverlay(selected);
+          },
+          child: Column(
+            children: [
+              for (final overlay in RouteOverlay.values)
+                RadioListTile<RouteOverlay>(
+                  value: overlay,
+                  title: AutoHyphenatingText(overlay.label),
+                  subtitle: AutoHyphenatingText(overlay.description),
+                ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          title: AutoHyphenatingText('Seemarken einblenden'),
+          subtitle: AutoHyphenatingText(
+            'Bojen, Leuchttürme und Fahrwassermarkierungen (OpenSeaMap) über der '
+            'gewählten Karte. Keine amtliche Seekarte, keine Tiefenangaben.',
+          ),
+          value: widget.preferences.mapNauticalMode,
+          onChanged: widget.preferences.setMapNauticalMode,
+        ),
+        const SizedBox(height: 32),
+        AutoHyphenatingText('Quellen und Nutzungshinweise', style: theme.textTheme.titleMedium),
+        for (final style in MapStyle.values)
+          _buildSourceCard(
+            context,
+            label: style.label,
+            credits: style.creditsLine,
+            usage: style.usageNote,
+            url: style.infoUrl,
+          ),
+        for (final overlay in RouteOverlay.values.where((o) => o.isActive))
+          _buildSourceCard(
+            context,
+            label: overlay.label,
+            credits: overlay.creditsLine,
+            usage: overlay.usageNote,
+            url: overlay.infoUrl,
+          ),
+      ],
+    );
+  }
+
+  Widget _buildSourceCard(
+    BuildContext context, {
+    required String label,
+    required String credits,
+    required String usage,
+    required String url,
+  }) {
+    final theme = Theme.of(context);
+    return Card(
+      margin: const EdgeInsets.only(top: 12),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            AutoHyphenatingText(label, style: theme.textTheme.titleSmall),
+            const SizedBox(height: 4),
+            AutoHyphenatingText(credits, style: theme.textTheme.bodySmall),
+            const SizedBox(height: 4),
+            AutoHyphenatingText(usage, style: theme.textTheme.bodySmall),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                onPressed: () => openExternalLink(url),
+                icon: const Icon(Icons.open_in_new, size: 18),
+                label: const Text('Nutzungsbedingungen öffnen'),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 

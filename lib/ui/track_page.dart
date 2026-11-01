@@ -22,7 +22,8 @@ import 'track_detail_page.dart';
 import 'widgets/accuracy_badge.dart';
 import 'widgets/map_tile_layers.dart';
 import 'widgets/measurement_pulse_indicator.dart';
-import 'widgets/nautical_mode_button.dart';
+import 'widgets/map_legend_button.dart';
+import 'widgets/map_style_button.dart';
 import 'widgets/north_lock_button.dart';
 import 'widgets/place_search_sheet.dart';
 import 'widgets/track_profile_charts.dart';
@@ -642,6 +643,15 @@ class _TrackPageState extends State<TrackPage> with SingleTickerProviderStateMix
   /// Statuskarte).
   Widget _buildMapTab(BuildContext context, RecordingState state) {
     final nauticalMode = widget.preferences.mapNauticalMode;
+    final mapStyle = widget.preferences.mapStyle;
+    // Unterer Rand für Statuskarte und Legenden-Button: Bei dauerhaft
+    // sichtbarer Quellenangabe (siehe MapStyle) bleibt er frei, mit
+    // Zusatz-Overlays wird die Quellenzeile länger (ggf. zwei Zeilen).
+    final extraAttribution = nauticalMode || widget.preferences.routeOverlay.isActive;
+    final bottomInset = !mapStyle.alwaysVisibleAttribution ? 12.0 : (extraAttribution ? 56.0 : 36.0);
+    // Der Legenden-Button sitzt links unten und rückt bei laufender oder
+    // pausierter Aufzeichnung über die Statuskarte (ca. 90-110 dp hoch).
+    final legendBottom = state != RecordingState.idle ? bottomInset + 108 : bottomInset;
     final liveLatLngs = widget.recordingService.points.map((p) => LatLng(p.latitude, p.longitude)).toList();
 
     final mapCenter = liveLatLngs.isNotEmpty ? liveLatLngs.last : _initialCenter;
@@ -669,7 +679,11 @@ class _TrackPageState extends State<TrackPage> with SingleTickerProviderStateMix
               ),
             ),
             children: [
-              ...buildMapTileLayers(nauticalMode: nauticalMode),
+              ...buildMapTileLayers(
+                nauticalMode: nauticalMode,
+                mapStyle: mapStyle,
+                routeOverlay: widget.preferences.routeOverlay,
+              ),
               if (liveLatLngs.length > 1)
                 PolylineLayer(
                   polylines: [
@@ -731,10 +745,12 @@ class _TrackPageState extends State<TrackPage> with SingleTickerProviderStateMix
         Positioned(
           top: 68,
           right: 12,
-          child: NauticalModeButton(
-            nauticalMode: nauticalMode,
-            onChanged: widget.preferences.setMapNauticalMode,
-          ),
+          child: MapStyleButton(preferences: widget.preferences),
+        ),
+        Positioned(
+          left: 12,
+          bottom: legendBottom,
+          child: MapLegendButton(preferences: widget.preferences),
         ),
         Positioned(
           top: 124,
@@ -752,7 +768,10 @@ class _TrackPageState extends State<TrackPage> with SingleTickerProviderStateMix
         ),
         if (state != RecordingState.idle)
           Positioned(
-            bottom: 12,
+            // Bei dauerhaft sichtbarer Quellenangabe (siehe MapStyle) bleibt
+            // der untere Kartenrand frei, damit die Statuskarte sie nicht
+            // verdeckt.
+            bottom: bottomInset,
             left: 12,
             right: 12,
             child: _buildStatsCard(context, state),

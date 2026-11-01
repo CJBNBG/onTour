@@ -10,7 +10,8 @@ import '../services/track_storage_service.dart';
 import '../util/track_formatter.dart';
 import '../util/track_profile_calculator.dart';
 import 'widgets/map_tile_layers.dart';
-import 'widgets/nautical_mode_button.dart';
+import 'widgets/map_legend_button.dart';
+import 'widgets/map_style_button.dart';
 import 'widgets/north_lock_button.dart';
 import 'widgets/track_profile_charts.dart';
 
@@ -229,6 +230,11 @@ class _TrackDetailPageState extends State<TrackDetailPage> with SingleTickerProv
   /// Statuskarte).
   Widget _buildMapTab(BuildContext context) {
     final nauticalMode = widget.preferences.mapNauticalMode;
+    // Legenden-Button links unten; bei dauerhaft sichtbarer Quellenangabe
+    // (siehe MapStyle) oberhalb davon, damit er sie nicht verdeckt.
+    final legendBottom = !widget.preferences.mapStyle.alwaysVisibleAttribution
+        ? 12.0
+        : (nauticalMode || widget.preferences.routeOverlay.isActive ? 56.0 : 36.0);
 
     return Column(
       children: [
@@ -256,7 +262,11 @@ class _TrackDetailPageState extends State<TrackDetailPage> with SingleTickerProv
                   },
                 ),
                 children: [
-                  ...buildMapTileLayers(nauticalMode: nauticalMode),
+                  ...buildMapTileLayers(
+                    nauticalMode: nauticalMode,
+                    mapStyle: widget.preferences.mapStyle,
+                    routeOverlay: widget.preferences.routeOverlay,
+                  ),
                   PolylineLayer(
                     polylines: [
                       Polyline(
@@ -296,10 +306,12 @@ class _TrackDetailPageState extends State<TrackDetailPage> with SingleTickerProv
               Positioned(
                 top: 12,
                 right: 12,
-                child: NauticalModeButton(
-                  nauticalMode: nauticalMode,
-                  onChanged: widget.preferences.setMapNauticalMode,
-                ),
+                child: MapStyleButton(preferences: widget.preferences),
+              ),
+              Positioned(
+                left: 12,
+                bottom: legendBottom,
+                child: MapLegendButton(preferences: widget.preferences),
               ),
               Positioned(
                 top: 68,
