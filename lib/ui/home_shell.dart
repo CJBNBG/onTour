@@ -79,6 +79,10 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
   final TrackRecordingService _trackRecordingService = TrackRecordingService();
   final DeviceStatusService _deviceStatus = DeviceStatusService();
 
+  /// NEU: true, solange die Karte der Track-Seite im Vollbild läuft - blendet
+  /// App-Leiste, Statusbereich und Navigationsleiste aus (siehe TrackPage).
+  final ValueNotifier<bool> _mapFullscreen = ValueNotifier<bool>(false);
+
   /// NEU (siehe README Abschnitt 47): Luftdruck-Verlauf für den
   /// 3-Stunden-Trend - lebt wie der TrackRecordingService bewusst so lange
   /// wie HomeShell, da ein Trend den Verlauf über Stunden braucht, der bei
@@ -138,44 +142,50 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     unawaited(_trackRecordingService.dispose());
     unawaited(_pressureTrendService.dispose());
     _deviceStatus.dispose();
+    _mapFullscreen.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      // Eine gemeinsame AppBar für alle vier Seiten sorgt zum einen dafür,
-      // dass der Inhalt nie in den oberen Systembereich (Uhrzeit/Akku/
-      // Empfang) hineinragt - Scaffold+AppBar respektieren diesen Bereich
-      // automatisch -, zum anderen liefert sie auf jeder Seite denselben
-      // Info-Button oben rechts.
-      appBar: AppBar(
-        title: AutoHyphenatingText(_titles[_selectedIndex]),
-        actions: [
-          IconButton(
-            tooltip: 'Info',
-            icon: const Icon(Icons.info_outline),
-            onPressed: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (context) => const InfoPage()),
+    return ValueListenableBuilder<bool>(
+      valueListenable: _mapFullscreen,
+      builder: (context, fullscreen, _) => Scaffold(
+        appBar: fullscreen
+            ? null
+            : AppBar(
+                title: AutoHyphenatingText(_titles[_selectedIndex]),
+                actions: [
+                  IconButton(
+                    tooltip: 'Info',
+                    icon: const Icon(Icons.info_outline),
+                    onPressed: () => Navigator.of(context).push(
+                      MaterialPageRoute(builder: (context) => const InfoPage()),
+                    ),
+                  ),
+                ],
+              ),
+        body: Column(
+          children: [
+            Visibility(
+              visible: !fullscreen,
+              child: AppStatusBar(status: _deviceStatus),
             ),
-          ),
-        ],
-      ),
-      body: Column(
-        children: [
-          AppStatusBar(status: _deviceStatus),
-          Expanded(child: _buildPage(_selectedIndex)),
-        ],
-      ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _selectedIndex,
-        onDestinationSelected: (index) => setState(() => _selectedIndex = index),
-        destinations: const [
-          NavigationDestination(icon: Icon(Icons.speed), label: 'Tacho'),
-          NavigationDestination(icon: Icon(Icons.explore), label: 'Kompass'),
-          NavigationDestination(icon: Icon(Icons.route), label: 'Track'),
-          NavigationDestination(icon: Icon(Icons.settings), label: 'Einstellungen'),
-        ],
+            Expanded(child: _buildPage(_selectedIndex)),
+          ],
+        ),
+        bottomNavigationBar: fullscreen
+            ? null
+            : NavigationBar(
+                selectedIndex: _selectedIndex,
+                onDestinationSelected: (index) => setState(() => _selectedIndex = index),
+                destinations: const [
+                  NavigationDestination(icon: Icon(Icons.speed), label: 'Tacho'),
+                  NavigationDestination(icon: Icon(Icons.explore), label: 'Kompass'),
+                  NavigationDestination(icon: Icon(Icons.route), label: 'Track'),
+                  NavigationDestination(icon: Icon(Icons.settings), label: 'Einstellungen'),
+                ],
+              ),
       ),
     );
   }
@@ -193,6 +203,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
         return TrackPage(
           recordingService: _trackRecordingService,
           preferences: widget.preferences,
+          fullscreen: _mapFullscreen,
         );
       case 3:
         return SettingsPage(preferences: widget.preferences);

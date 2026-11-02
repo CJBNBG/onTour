@@ -42,8 +42,7 @@ enum MapStyle {
         'Kartographie und Geodäsie - ruhige Darstellung, gut lesbar, '
         'weltweit mit Schwerpunkt Deutschland.',
     // Achtung: Reihenfolge {z}/{y}/{x} (Zeile vor Spalte), nicht {z}/{x}/{y}.
-    urlTemplate:
-        'https://sgx.geodatenzentrum.de/wmts_topplus_open/tile/1.0.0/web/default/WEBMERCATOR/{z}/{y}/{x}.png',
+    urlTemplate: 'https://sgx.geodatenzentrum.de/wmts_topplus_open/tile/1.0.0/web/default/WEBMERCATOR/{z}/{y}/{x}.png',
     maxNativeZoom: 18,
     // Quellenvermerk laut Nutzungsbedingungen: "© BKG (Jahr des letzten
     // Datenbezugs) dl-de/by-2-0, Datenquellen: (Link)". Das Jahr jährlich
@@ -116,7 +115,7 @@ enum MapStyle {
     attributions: [
       MapAttribution('Reit- und Wanderkarte', 'https://www.wanderreitkarte.de'),
       MapAttribution('CC-BY-NC-SA', 'https://creativecommons.org/licenses/by-nc-sa/3.0/de/'),
-      MapAttribution('© OpenStreetMap-Mitwirkende', 'https://www.openstreetmap.org/copyright'),
+      MapAttribution('© Daten OpenStreetMap-Mitwirkende', 'https://www.openstreetmap.org/copyright'),
     ],
     creditsLine: 'Reit- und Wanderkarte (www.wanderreitkarte.de), Lizenz '
         'CC-BY-NC-SA 3.0 DE. Daten von OpenStreetMap und Mitwirkenden, '

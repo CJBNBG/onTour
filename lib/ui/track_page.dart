@@ -7,6 +7,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
+import 'package:flutter/services.dart';
 
 import '../models/place_result.dart';
 import '../models/recorded_track.dart';
@@ -61,10 +62,14 @@ class TrackPage extends StatefulWidget {
   final TrackRecordingService recordingService;
   final AppPreferences preferences;
 
+  /// NEU: Gemeinsamer Vollbild-Zustand der Karte, gehalten von HomeShell.
+  final ValueNotifier<bool> fullscreen;
+
   const TrackPage({
     super.key,
     required this.recordingService,
     required this.preferences,
+    required this.fullscreen,
   });
 
   @override
@@ -149,6 +154,7 @@ class _TrackPageState extends State<TrackPage> with SingleTickerProviderStateMix
     _loadSavedTracks();
     _syncWakelock();
     _checkForRecoverableCheckpoint();
+    widget.fullscreen.addListener(_onFullscreenChanged);
   }
 
   /// NEU (Fehlerkorrektur, siehe README): Prüft beim Öffnen der Track-Seite,
@@ -506,15 +512,30 @@ class _TrackPageState extends State<TrackPage> with SingleTickerProviderStateMix
     // nicht betroffen, die lebt unabhaengig im TrackRecordingService
     // weiter (siehe Klassenkommentar).
     WakelockPlus.disable();
+    widget.fullscreen.removeListener(_onFullscreenChanged);
+    if (widget.fullscreen.value) {
+      unawaited(SystemChrome.setEnabledSystemUIMode(
+        SystemUiMode.manual,
+        overlays: SystemUiOverlay.values,
+      ));
+      final notifier = widget.fullscreen;
+      scheduleMicrotask(() => notifier.value = false);
+    }
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return SafeArea(
-      child: ListenableBuilder(
-        listenable: widget.preferences,
-        builder: (context, _) => _buildBody(context),
+    return PopScope(
+      canPop: !widget.fullscreen.value,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _setFullscreen(false);
+      },
+      child: SafeArea(
+        child: ListenableBuilder(
+          listenable: widget.preferences,
+          builder: (context, _) => _buildBody(context),
+        ),
       ),
     );
   }
@@ -582,57 +603,52 @@ class _TrackPageState extends State<TrackPage> with SingleTickerProviderStateMix
 
   Widget _buildReady(BuildContext context) {
     final state = widget.recordingService.state;
+    final fullscreen = widget.fullscreen.value;
 
     return Column(
       children: [
-        // NEU (siehe README Abschnitt 37): Oberhalb der Unterreiter
-        // platziert, damit sie auf "Karte" UND "Details" gleichermaßen
-        // sichtbar ist. Zeigt die auf dieser Seite AKTUELL verwendete
-        // Genauigkeitsstufe - hier fest die von TrackRecordingService
-        // verwendete (siehe Abschnitt 19), NICHT die auf der
-        // Einstellungsseite wählbare (die gilt nur für die Tacho-Seite) -
-        // sowie einen kurzen optischen Impuls bei jedem neuen
-        // Track-Punkt.
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              AccuracyBadge(
-                mode: SpeedAccuracyMode.fromLocationAccuracy(TrackRecordingService.fixedAccuracy),
-              ),
-              MeasurementPulseIndicator(pulseKey: _measurementTick),
-            ],
+        Visibility(
+          visible: !fullscreen,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                AccuracyBadge(
+                  mode: SpeedAccuracyMode.fromLocationAccuracy(TrackRecordingService.fixedAccuracy),
+                ),
+                MeasurementPulseIndicator(pulseKey: _measurementTick),
+              ],
+            ),
           ),
         ),
-        TabBar(
-          controller: _tabController,
-          // Bewusst normale Text-Labels statt AutoHyphenatingText - siehe
-          // dieselbe, bereits mehrfach im Projekt dokumentierte
-          // Begründung bei den Unterreitern der Einstellungsseite (README
-          // Abschnitt 24/26).
-          tabs: const [
-            Tab(text: 'Karte'),
-            Tab(text: 'Details'),
-          ],
+        Visibility(
+          visible: !fullscreen,
+          child: TabBar(
+            controller: _tabController,
+            tabs: const [
+              Tab(text: 'Karte'),
+              Tab(text: 'Details'),
+            ],
+          ),
         ),
         Expanded(
           child: TabBarView(
             controller: _tabController,
+            // Im Vollbild ist Wischen zum Details-Tab gesperrt.
+            physics: fullscreen ? const NeverScrollableScrollPhysics() : null,
             children: [
               _buildMapTab(context, state),
               _buildDetailsTab(context),
             ],
           ),
         ),
-        // NEU (README Abschnitt 29): Start-/Pause-/Beenden-Steuerung
-        // sitzt jetzt AUSSERHALB der Unterreiter, unterhalb von beiden
-        // gleichermaßen sichtbar - der Nutzer soll die Aufzeichnung auch
-        // pausieren/beenden können, während er gerade den Details-Tab
-        // betrachtet, nicht nur auf der Karte.
-        Padding(
-          padding: const EdgeInsets.all(16),
-          child: _buildControls(context, state),
+        Visibility(
+          visible: !fullscreen,
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: _buildControls(context, state),
+          ),
         ),
       ],
     );
@@ -735,6 +751,11 @@ class _TrackPageState extends State<TrackPage> with SingleTickerProviderStateMix
           left: 12,
           child: _buildSearchButton(context),
         ),
+        Positioned(
+          left: 12,
+          bottom: legendBottom + 56,
+          child: _buildFullscreenButton(context),
+        ),
         if (widget.preferences.destination != null)
           Positioned(
             top: 12,
@@ -765,6 +786,11 @@ class _TrackPageState extends State<TrackPage> with SingleTickerProviderStateMix
               });
             },
           ),
+        ),
+        Positioned(
+          top: 180,
+          right: 12,
+          child: _buildCenterOnPositionButton(context),
         ),
         if (state != RecordingState.idle)
           Positioned(
@@ -977,6 +1003,49 @@ class _TrackPageState extends State<TrackPage> with SingleTickerProviderStateMix
       return LatLng(points.last.latitude, points.last.longitude);
     }
     return _initialCenter;
+  }
+
+  void _onFullscreenChanged() {
+    if (mounted) setState(() {});
+  }
+
+  /// NEU: Schaltet das Karten-Vollbild ein/aus. HomeShell blendet seine
+  /// Leisten über den gemeinsamen Notifier aus, die Systemleisten
+  /// (Uhrzeit/Akku, Navigationsleiste des Geräts) werden hier versteckt.
+  void _setFullscreen(bool value) {
+    if (widget.fullscreen.value == value) return;
+    widget.fullscreen.value = value;
+    unawaited(
+      value
+          ? SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky)
+          : SystemChrome.setEnabledSystemUIMode(
+              SystemUiMode.manual,
+              overlays: SystemUiOverlay.values,
+            ),
+    );
+  }
+
+  Widget _buildFullscreenButton(BuildContext context) {
+    final fullscreen = widget.fullscreen.value;
+    return Tooltip(
+      message: fullscreen ? 'Vollbild beenden' : 'Karte im Vollbild',
+      child: Material(
+        color: fullscreen ? Theme.of(context).colorScheme.primaryContainer : Theme.of(context).colorScheme.surface.withValues(alpha: 0.9),
+        shape: const CircleBorder(),
+        elevation: 4,
+        child: InkWell(
+          customBorder: const CircleBorder(),
+          onTap: () => _setFullscreen(!fullscreen),
+          child: Padding(
+            padding: const EdgeInsets.all(10),
+            child: Icon(
+              fullscreen ? Icons.fullscreen_exit : Icons.fullscreen,
+              color: fullscreen ? Theme.of(context).colorScheme.onPrimaryContainer : Theme.of(context).colorScheme.primary,
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   Future<void> _openPlaceSearch() async {
@@ -1303,6 +1372,62 @@ class _TrackPageState extends State<TrackPage> with SingleTickerProviderStateMix
           },
         );
       },
+    );
+  }
+
+  /// NEU: Setzt den Kartenfokus wieder auf die eigene Position. Bei laufender
+  /// oder pausierter Aufzeichnung ist das der letzte Track-Punkt, sonst wird
+  /// einmalig eine frische Position ermittelt (kein Dauer-Stream, siehe
+  /// _initialize). Hebt außerdem die Mitführ-Pause nach dem Anzeigen eines
+  /// Ziels auf, damit die Karte der Position bei laufender Aufzeichnung
+  /// wieder automatisch folgt. Die Kartendrehung bleibt unverändert.
+  Future<void> _centerOnOwnPosition() async {
+    if (!_mapReady) return;
+    _followPausedUntil = null;
+
+    LatLng? target;
+    if (widget.recordingService.state != RecordingState.idle && widget.recordingService.points.isNotEmpty) {
+      final last = widget.recordingService.points.last;
+      target = LatLng(last.latitude, last.longitude);
+    } else {
+      try {
+        final position = await Geolocator.getCurrentPosition();
+        target = LatLng(position.latitude, position.longitude);
+        if (!mounted) return;
+        // Auch den Positionsmarker im Leerlauf aktualisieren.
+        setState(() => _initialCenter = target);
+      } catch (_) {
+        target = _referencePoint();
+      }
+    }
+
+    if (!mounted) return;
+    if (target == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Eigene Position derzeit nicht verfügbar.')),
+      );
+      return;
+    }
+    final zoom = _mapController.camera.zoom;
+    _mapController.move(target, zoom < 15 ? 15 : zoom);
+  }
+
+  Widget _buildCenterOnPositionButton(BuildContext context) {
+    return Tooltip(
+      message: 'Auf eigene Position zentrieren',
+      child: Material(
+        color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.9),
+        shape: const CircleBorder(),
+        elevation: 4,
+        child: InkWell(
+          customBorder: const CircleBorder(),
+          onTap: _centerOnOwnPosition,
+          child: Padding(
+            padding: const EdgeInsets.all(10),
+            child: Icon(Icons.gps_fixed, color: Theme.of(context).colorScheme.primary),
+          ),
+        ),
+      ),
     );
   }
 
