@@ -383,6 +383,41 @@ class _SettingsPageState extends State<SettingsPage> with SingleTickerProviderSt
         _buildSpeedAccuracySection(context),
         const SizedBox(height: 32),
         _buildAutoPauseReminderSection(context),
+        const SizedBox(height: 32),
+        _buildAltitudeCalibrationSection(context),
+      ],
+    );
+  }
+
+  /// NEU (README Abschnitt 54): Zeigt den manuellen Höhenversatz und erlaubt
+  /// das Zurücksetzen. Die Kalibrierung selbst erfolgt auf der
+  /// Kompass-Seite (Symbol "Höhe kalibrieren" oben rechts), weil dort die
+  /// aktuell angezeigte Höhe bekannt ist.
+  Widget _buildAltitudeCalibrationSection(BuildContext context) {
+    final offset = widget.preferences.altitudeManualOffsetMeters;
+    final offsetText = offset == 0 ? 'kein Versatz' : '${offset >= 0 ? '+' : ''}${offset.toStringAsFixed(1).replaceAll('.', ',')} m';
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        AutoHyphenatingText('Höhenkalibrierung', style: Theme.of(context).textTheme.titleMedium),
+        const SizedBox(height: 8),
+        AutoHyphenatingText(
+          'Die Höhe wird automatisch auf Normalnull (NN) umgerechnet, sofern das Gerät '
+          'das unterstützt (ab Android 14). Weicht sie trotzdem ab, kannst du sie auf '
+          'der Kompass-Seite mit dem Symbol "Höhe kalibrieren" an eine bekannte Höhe '
+          'anpassen.',
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+        const SizedBox(height: 8),
+        AutoHyphenatingText('Manueller Versatz: $offsetText'),
+        if (offset != 0)
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton(
+              onPressed: () => widget.preferences.setAltitudeManualOffsetMeters(0),
+              child: const Text('Versatz zurücksetzen'),
+            ),
+          ),
       ],
     );
   }

@@ -10,6 +10,7 @@ import '../models/altitude_reading.dart';
 import '../models/compass_reading.dart';
 import '../models/position_display_format.dart';
 import '../models/speed_accuracy_mode.dart';
+import '../services/altitude_correction.dart';
 import '../services/altitude_service.dart';
 import '../services/app_preferences.dart';
 import '../services/barometer_altitude_service.dart';
@@ -60,6 +61,24 @@ class _CompassPageState extends State<CompassPage> {
   /// GPS-Höhe auf die deutlich präzisere Barometer-Höhe (siehe
   /// BarometerAltitudeService für die Hintergründe).
   bool _usingBarometer = false;
+
+  /// NEU (README Abschnitt 55): true, wenn das Gerät keinen Drucksensor
+  /// liefert - dann bleibt es bei der GPS-Höhe.
+  bool _barometerUnavailable = false;
+
+  /// Zeitpunkt der ersten GPS-Höhenmessung dieser Seite - Grundlage für
+  /// den Hinweistext, solange noch keine brauchbare Höhe vorliegt.
+  DateTime? _firstGpsAltitudeAt;
+
+  /// Solange der Barometer noch keine gegen brauchbares GPS kalibrierte
+  /// Höhe liefert, wäre die rohe GPS-Höhe (anfangs/drinnen oft um
+  /// Dutzende Meter falsch) irreführend - stattdessen erscheint ein Text.
+  bool get _altitudePending =>
+      _altitudeReading != null && !_usingBarometer && !_barometerUnavailable;
+
+  /// Nach so langer Zeit ohne brauchbare Höhe lautet der Hinweis
+  /// "kein guter GPS-Empfang" statt "Warte auf ...".
+  static const Duration _pendingHintAfter = Duration(seconds: 90);
 
   /// Siehe README Abschnitt 37: Wird bei jeder neuen GPS- ODER
   /// Barometer-Höhenmessung erhöht - dient MeasurementPulseIndicator als
@@ -124,17 +143,28 @@ class _CompassPageState extends State<CompassPage> {
     // Barometer kalibriert wird (siehe BarometerAltitudeService).
     _gpsAltitudeSubscription = _altitudeService.altitudeStream().listen((reading) {
       if (!mounted) return;
+      // NEU (README Abschnitt 54): NN-Korrektur auf die GPS-Höhe, manueller
+      // Versatz nur auf den angezeigten Endwert.
+      final correction = AltitudeCorrection.instance;
+      unawaited(correction.refreshIfDue(
+        dartAltitude: reading.altitudeMeters,
+        shownAltitude: _altitudeReading?.altitudeMeters,
+      ));
+      final reference = correction.gpsReference(reading.altitudeMeters);
+      final shown = _withAltitude(reading, correction.display(reference));
+      _firstGpsAltitudeAt ??= DateTime.now();
       _barometerAltitudeService.calibrate(
-        referenceAltitudeMeters: reading.altitudeMeters,
+        referenceAltitudeMeters: reference,
         referenceLatitude: reading.latitude,
         referenceLongitude: reading.longitude,
         referencePositionAccuracyMeters: reading.positionAccuracyMeters,
+        referenceAltitudeAccuracyMeters: reading.altitudeAccuracyMeters,
       );
       _maybeUpdateDeclination(reading);
-      widget.pressureService.noteAltitude(reading.altitudeMeters);
+      widget.pressureService.noteAltitude(shown.altitudeMeters);
       if (_usingBarometer) return; // Barometer-Wert hat weiterhin Vorrang
       setState(() {
-        _altitudeReading = reading;
+        _altitudeReading = shown;
         _measurementTick++;
       });
     });
@@ -145,9 +175,13 @@ class _CompassPageState extends State<CompassPage> {
     _barometerAltitudeSubscription = _barometerAltitudeService.altitudeStream().listen(
       (reading) {
         if (!mounted) return;
-        widget.pressureService.noteAltitude(reading.altitudeMeters);
+        final shown = _withAltitude(
+          reading,
+          AltitudeCorrection.instance.display(reading.altitudeMeters),
+        );
+        widget.pressureService.noteAltitude(shown.altitudeMeters);
         setState(() {
-          _altitudeReading = reading;
+          _altitudeReading = shown;
           _usingBarometer = true;
           _measurementTick++;
         });
@@ -156,8 +190,104 @@ class _CompassPageState extends State<CompassPage> {
       // Sensor gemeldeter Fehler (z. B. Gerät ohne Barometer) als
       // unbehandelter Stream-Fehler durchschlagen. In diesem Fall bleibt
       // es einfach bei der GPS-Höhe.
-      onError: (Object error) {},
+      onError: (Object error) {
+        if (!mounted) return;
+        setState(() => _barometerUnavailable = true);
+      },
     );
+  }
+
+  /// Kopie einer Messung mit anderem Höhenwert (Position etc. bleiben).
+  AltitudeReading _withAltitude(AltitudeReading r, double altitude) => AltitudeReading(
+        altitudeMeters: altitude,
+        altitudeAccuracyMeters: r.altitudeAccuracyMeters,
+        latitude: r.latitude,
+        longitude: r.longitude,
+        positionAccuracyMeters: r.positionAccuracyMeters,
+        timestamp: r.timestamp,
+      );
+
+  static String _signed(double v) => '${v >= 0 ? '+' : ''}${_altitudeFormatBarometer.format(v)}';
+
+  /// NEU (README Abschnitt 54): Dialog zur manuellen Höhenkalibrierung.
+  /// Der Nutzer gibt eine bekannte Höhe (m ü. NN) ein, der Versatz zur
+  /// aktuell angezeigten Höhe wird gespeichert. Bewusst normale Text-
+  /// Widgets im AlertDialog (siehe README Abschnitt 13).
+  Future<void> _openAltitudeCalibration() async {
+    final shown = _altitudeReading?.altitudeMeters;
+    final messenger = ScaffoldMessenger.of(context);
+    if (shown == null) {
+      messenger.showSnackBar(const SnackBar(content: Text('Noch keine Höhe verfügbar.')));
+      return;
+    }
+    if (_altitudePending) {
+      messenger.showSnackBar(const SnackBar(content: Text('Die Höhe wird noch ermittelt - bitte kurz warten.')));
+      return;
+    }
+    final correction = AltitudeCorrection.instance;
+    final currentOffset = widget.preferences.altitudeManualOffsetMeters;
+    final controller = TextEditingController();
+
+    final action = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        scrollable: true,
+        title: const Text('Höhe kalibrieren'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Gib die tatsächliche Höhe deines Standorts ein (m ü. NN, z. B. von '
+              'einem Höhenpunkt oder einer Karte). Am besten nach einigen Minuten '
+              'im Freien.',
+            ),
+            const SizedBox(height: 12),
+            Text('Angezeigt: ${_altitudeFormatBarometer.format(shown)} m'),
+            Text(
+              correction.hasMslCorrection
+                  ? 'NN-Korrektur (Android): ${_signed(correction.mslCorrectionMeters)} m'
+                  : (correction.mslSupported
+                      ? 'NN-Korrektur (Android): noch nicht ermittelt'
+                      : 'NN-Korrektur (Android): erst ab Android 14'),
+            ),
+            Text('Manueller Versatz: ${_signed(currentOffset)} m'),
+            const SizedBox(height: 12),
+            TextField(
+              controller: controller,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
+              decoration: const InputDecoration(
+                labelText: 'Tatsächliche Höhe',
+                suffixText: 'm',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(dialogContext).pop('cancel'), child: const Text('Abbrechen')),
+          if (currentOffset != 0)
+            TextButton(onPressed: () => Navigator.of(dialogContext).pop('reset'), child: const Text('Zurücksetzen')),
+          FilledButton(onPressed: () => Navigator.of(dialogContext).pop('apply'), child: const Text('Übernehmen')),
+        ],
+      ),
+    );
+
+    final text = controller.text;
+    controller.dispose();
+    if (!mounted || action == null || action == 'cancel') return;
+
+    if (action == 'reset') {
+      await widget.preferences.setAltitudeManualOffsetMeters(0);
+      return;
+    }
+    final known = double.tryParse(text.trim().replaceAll(',', '.'));
+    if (known == null || known < -500 || known > 9000) {
+      messenger.showSnackBar(const SnackBar(content: Text('Ungültige Höhe.')));
+      return;
+    }
+    // Angezeigt = Rohwert + currentOffset, gewünscht = known.
+    await widget.preferences.setAltitudeManualOffsetMeters(known - shown + currentOffset);
   }
 
   @override
@@ -185,6 +315,7 @@ class _CompassPageState extends State<CompassPage> {
   String get _altitudeText {
     final reading = _altitudeReading;
     if (reading == null) return 'Höhe: nicht verfügbar';
+    if (_altitudePending) return 'Höhe: wird ermittelt …';
 
     final format = _usingBarometer ? _altitudeFormatBarometer : _altitudeFormatGps;
     return 'Höhe: ${format.format(reading.altitudeMeters)} m ü. NN';
@@ -195,6 +326,11 @@ class _CompassPageState extends State<CompassPage> {
   /// build()), analog zur Genauigkeit der Kursangabe.
   String get _altitudeAccuracyText {
     final reading = _altitudeReading;
+    if (_altitudePending) {
+      final since = _firstGpsAltitudeAt;
+      final waitedLong = since != null && DateTime.now().difference(since) > _pendingHintAfter;
+      return waitedLong ? 'Kein guter GPS-Empfang (z. B. im Gebäude)' : 'Warte auf genaues GPS-Signal';
+    }
     if (reading == null || reading.altitudeAccuracyMeters == null) {
       return 'Genauigkeit: unbekannt';
     }
@@ -425,6 +561,14 @@ class _CompassPageState extends State<CompassPage> {
             children: [
               // NEU (README Abschnitt 48): Immer erreichbar, nicht nur bei
               // Störung - öffnet die geführte Kalibrierung.
+              IconButton(
+                tooltip: 'Höhe kalibrieren',
+                icon: const Icon(Icons.height),
+                iconSize: 20,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints.tightFor(width: 28, height: 28),
+                onPressed: _openAltitudeCalibration,
+              ),
               IconButton(
                 tooltip: 'Kompass kalibrieren',
                 icon: const Icon(Icons.threesixty),

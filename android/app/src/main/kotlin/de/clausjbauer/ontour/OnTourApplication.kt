@@ -1,7 +1,11 @@
 package de.clausjbauer.ontour
 
 import android.app.Application
+import android.content.Context
 import android.hardware.GeomagneticField
+import android.location.LocationManager
+import android.os.Build
+import android.os.SystemClock
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.embedding.engine.FlutterEngineCache
 import io.flutter.embedding.engine.dart.DartExecutor
@@ -72,6 +76,14 @@ class OnTourApplication : Application() {
          *  Magnetkompasses - muss exakt mit dem Dart-seitigen Namen in
          *  CompassService uebereinstimmen. */
         private const val CHANNEL_GEOMAGNETIC = "ontour/geomagnetic"
+
+        /** Kanal fuer die Hoehe ueber NN (MSL) aus dem Android-Location-
+         *  Objekt - muss exakt mit AltitudeCorrection (Dart) uebereinstimmen. */
+        private const val CHANNEL_ALTITUDE = "ontour/altitude"
+
+        /** Aelter als dieser Wert (ms) gilt der letzte bekannte Fix nicht
+         *  mehr als brauchbar fuer die Geoid-Korrektur. */
+        private const val MAX_FIX_AGE_MS = 10 * 60 * 1000L
     }
 
     override fun onCreate() {
@@ -94,6 +106,7 @@ class OnTourApplication : Application() {
         setupAutoPauseReminderChannel(flutterEngine)
         setupNavigationChannel(flutterEngine)
         setupGeomagneticChannel(flutterEngine)
+        setupAltitudeChannel(flutterEngine)
     }
 
     /**
@@ -192,5 +205,57 @@ class OnTourApplication : Application() {
                     else -> result.notImplemented()
                 }
             }
+    }
+
+    /**
+     * Liefert auf Anfrage von AltitudeCorrection die Hoehe des letzten
+     * GPS-Fixes sowohl als `Location.getAltitude()` (derselbe Wert, den
+     * geolocator als Position.altitude weitergibt) als auch als Hoehe ueber
+     * NN (`getMslAltitudeMeters`, ab Android 14). Die Differenz ist der
+     * Geoid-Versatz des Geraets.
+     */
+    private fun setupAltitudeChannel(flutterEngine: FlutterEngine) {
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL_ALTITUDE)
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "mslAltitude" -> result.success(readMslAltitude())
+                    else -> result.notImplemented()
+                }
+            }
+    }
+
+    private fun readMslAltitude(): Map<String, Any?> {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            return mapOf("supported" to false)
+        }
+        return try {
+            val manager = getSystemService(Context.LOCATION_SERVICE) as? LocationManager
+            val location = manager?.getLastKnownLocation(LocationManager.GPS_PROVIDER)
+            val ageMs = location?.let {
+                (SystemClock.elapsedRealtimeNanos() - it.elapsedRealtimeNanos) / 1_000_000L
+            }
+            if (location == null || ageMs == null || ageMs > MAX_FIX_AGE_MS ||
+                !location.hasAltitude() || !location.hasMslAltitude()
+            ) {
+                mapOf("supported" to true, "hasFix" to false)
+            } else {
+                mapOf(
+                    "supported" to true,
+                    "hasFix" to true,
+                    "altitude" to location.altitude,
+                    "msl" to location.mslAltitudeMeters,
+                    "mslAccuracy" to if (location.hasMslAltitudeAccuracy()) {
+                        location.mslAltitudeAccuracyMeters.toDouble()
+                    } else {
+                        null
+                    },
+                )
+            }
+        } catch (e: SecurityException) {
+            // Standortberechtigung (noch) nicht erteilt.
+            mapOf("supported" to true, "hasFix" to false)
+        } catch (e: Exception) {
+            mapOf("supported" to true, "hasFix" to false)
+        }
     }
 }

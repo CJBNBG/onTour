@@ -46,6 +46,23 @@ class BarometerAltitudeService {
   /// gemittelt, Wetterdrift (grob < 10 m pro Stunde) trotzdem verfolgt.
   static const double _offsetTimeConstantSeconds = 120;
 
+  /// NEU (README Abschnitt 55): GPS-Höhen mit schlechterer Genauigkeit
+  /// (Meter) werden für die Referenz ignoriert - drinnen bzw. kurz nach dem
+  /// Start sind sie oft um Dutzende Meter falsch.
+  static const double _maxUsableAccuracyMeters = 25;
+
+  /// Angenommene Genauigkeit, wenn das System keine liefert (Android meldet
+  /// dann oft 0).
+  static const double _unknownAccuracyMeters = 10;
+
+  /// Untergrenze der Genauigkeit für die Gewichtung (verhindert extreme
+  /// Gewichte bei zu optimistischen Angaben).
+  static const double _minWeightAccuracyMeters = 3;
+
+  /// Summe der bisherigen Gewichte - Grundlage des anfänglichen
+  /// gewichteten Mittelwerts.
+  double _weightSum = 0;
+
   StreamSubscription<BarometerEvent>? _subscription;
   StreamController<AltitudeReading>? _controller;
 
@@ -59,7 +76,6 @@ class BarometerAltitudeService {
   /// Langsam nachgeführter Versatz zwischen Barometer-Höhe (relativ zum
   /// Referenzpunkt) und der GPS-Höhe.
   double _offsetMeters = 0;
-  int _offsetSampleCount = 0;
   DateTime? _lastOffsetUpdateAt;
 
   double? _referenceLatitude;
@@ -84,14 +100,25 @@ class BarometerAltitudeService {
     required double referenceLatitude,
     required double referenceLongitude,
     double? referencePositionAccuracyMeters,
+    double? referenceAltitudeAccuracyMeters,
     double? referencePressureHPa,
   }) {
-    final pressure = referencePressureHPa ?? _smoothedPressureHPa;
-    if (pressure == null) return; // noch kein Luftdruckwert vorhanden
-
+    // Position wird immer durchgereicht, unabhängig von der Höhengüte.
     _referenceLatitude = referenceLatitude;
     _referenceLongitude = referenceLongitude;
     _referencePositionAccuracyMeters = referencePositionAccuracyMeters;
+
+    final pressure = referencePressureHPa ?? _smoothedPressureHPa;
+    if (pressure == null) return; // noch kein Luftdruckwert vorhanden
+
+    // NEU (README Abschnitt 55): Genauigkeit der GPS-Höhe beurteilen.
+    var accuracy = referenceAltitudeAccuracyMeters;
+    if (accuracy == null || !accuracy.isFinite || accuracy <= 0) {
+      accuracy = _unknownAccuracyMeters;
+    }
+    if (accuracy > _maxUsableAccuracyMeters) return; // zu ungenau
+    final sigma = math.max(accuracy, _minWeightAccuracyMeters);
+    final weight = 1 / (sigma * sigma);
 
     final now = DateTime.now();
     final refPressure = _referencePressureHPa;
@@ -101,7 +128,7 @@ class BarometerAltitudeService {
       _referencePressureHPa = pressure;
       _referenceAltitudeMeters = referenceAltitudeMeters;
       _offsetMeters = 0;
-      _offsetSampleCount = 1;
+      _weightSum = weight;
       _lastOffsetUpdateAt = now;
       return;
     }
@@ -113,10 +140,14 @@ class BarometerAltitudeService {
     final dtSeconds = now.difference(last).inMilliseconds / 1000;
     // Anfangs laufender Mittelwert (1/(n+1)), später exponentieller
     // Tiefpass - je nachdem, welcher Faktor größer ist.
-    final timeAlpha = 1 - math.exp(-dtSeconds / _offsetTimeConstantSeconds);
-    final alpha = math.max(timeAlpha, 1 / (_offsetSampleCount + 1));
+    // NEU (README Abschnitt 55): Beide Faktoren werden mit der Güte der
+    // Messung gewichtet - eine Messung mit 4 m Genauigkeit zieht den
+    // Versatz deutlich stärker als eine mit 20 m.
+    final timeAlpha = (1 - math.exp(-dtSeconds / _offsetTimeConstantSeconds)) * math.min(1.0, weight * _unknownAccuracyMeters * _unknownAccuracyMeters);
+    final meanAlpha = weight / (_weightSum + weight);
+    final alpha = math.max(timeAlpha, meanAlpha);
     _offsetMeters += (target - _offsetMeters) * alpha;
-    _offsetSampleCount++;
+    _weightSum += weight;
     _lastOffsetUpdateAt = now;
   }
 
@@ -195,7 +226,7 @@ class BarometerAltitudeService {
     _referencePressureHPa = null;
     _referenceAltitudeMeters = null;
     _offsetMeters = 0;
-    _offsetSampleCount = 0;
+    _weightSum = 0;
     _lastOffsetUpdateAt = null;
     _referenceLatitude = null;
     _referenceLongitude = null;

@@ -96,7 +96,16 @@ class TrackProfileCalculator {
           );
     }
 
-    final startAltitude = points.first.altitudeMeters;
+    // Erste vorhandene Höhe als Bezug - die ersten Punkte einer
+    // Aufzeichnung können ohne Höhe sein, solange noch keine genaue
+    // Höhe vorlag (README Abschnitt 55).
+    double? startAltitude;
+    for (final p in points) {
+      if (p.altitudeMeters != null) {
+        startAltitude = p.altitudeMeters;
+        break;
+      }
+    }
 
     return [
       for (var i = 0; i < points.length; i++)

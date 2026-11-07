@@ -9,6 +9,7 @@ import 'package:path_provider/path_provider.dart';
 import '../models/altitude_reading.dart';
 import '../models/recorded_track.dart';
 import '../models/track_point.dart';
+import 'altitude_correction.dart';
 import 'barometer_altitude_service.dart';
 import 'diagnostic_log_service.dart';
 import 'motion_service.dart';
@@ -144,6 +145,14 @@ class TrackRecordingService {
   /// das Gerät kein Barometer besitzt oder noch keine erste GPS-Höhe zur
   /// Kalibrierung eingetroffen ist (siehe BarometerAltitudeService).
   double? _currentBarometerAltitudeMeters;
+
+  /// NEU (README Abschnitt 55): true, wenn das Gerät keinen Drucksensor
+  /// liefert - dann wird die GPS-Höhe verwendet, aber nur bei ausreichender
+  /// Höhengenauigkeit ([_maxUsableGpsAltitudeAccuracyMeters]).
+  bool _barometerUnavailable = false;
+
+  /// GPS-Höhen mit schlechterer Genauigkeit (Meter) landen nicht im Track.
+  static const double _maxUsableGpsAltitudeAccuracyMeters = 25;
 
   /// NEU (siehe README Abschnitt 29): Aktueller Kurs (Course over Ground,
   /// 0-360°) für die Momentanwerte-Anzeige auf dem Details-Tab der
@@ -396,6 +405,7 @@ class TrackRecordingService {
     _currentHeadingDegrees = null;
     _lastSpeedMetersPerSecond = null;
     _consecutiveStreamFailures = 0;
+    _barometerUnavailable = false;
     _retryTimer?.cancel();
     _retryTimer = null;
     _lastPositionReceivedAt = null;
@@ -510,6 +520,7 @@ class TrackRecordingService {
     _barometerSubscription ??= _barometerAltitudeService.altitudeStream().listen(
       (reading) => _currentBarometerAltitudeMeters = reading.altitudeMeters,
       onError: (Object error) {
+        _barometerUnavailable = true;
         // Gerät ohne Barometer (oder ein sonstiger Sensor-Fehler) - dann
         // bleibt es bei der GPS-Rohhöhe (siehe _onPosition), kein
         // Absturz. WICHTIG: Ohne diesen expliziten onError-Handler würde
@@ -704,11 +715,21 @@ class TrackRecordingService {
     // nötig.
     final positionAccuracy =
         position.accuracy.isFinite && position.accuracy >= 0 ? position.accuracy : null;
+    // NEU (README Abschnitt 54): NN-Korrektur (Android MSL) auf die
+    // GPS-Höhe, bevor sie als Referenz dient bzw. gespeichert wird.
+    final correction = AltitudeCorrection.instance;
+    final gpsReference = position.altitude.isFinite ? correction.gpsReference(position.altitude) : null;
+    unawaited(correction.refreshIfDue(
+      dartAltitude: position.altitude,
+      shownAltitude: _currentBarometerAltitudeMeters != null ? correction.display(_currentBarometerAltitudeMeters!) : null,
+    ));
     _barometerAltitudeService.calibrate(
-      referenceAltitudeMeters: position.altitude,
+      referenceAltitudeMeters: gpsReference ?? position.altitude,
       referenceLatitude: position.latitude,
       referenceLongitude: position.longitude,
       referencePositionAccuracyMeters: positionAccuracy,
+      referenceAltitudeAccuracyMeters:
+          position.altitudeAccuracy.isFinite ? position.altitudeAccuracy : null,
     );
 
     // NEU (README Abschnitt 27): Bevorzugt die präzisere, kalibrierte
@@ -716,8 +737,21 @@ class TrackRecordingService {
     // Wert vorliegt (analog zur Kompass-Seite, siehe Abschnitt 10) -
     // andernfalls (Gerät ohne Barometer, oder noch keine Kalibrierung
     // erfolgt) fällt es auf die GPS-Rohhöhe zurück.
-    final altitude =
-        _currentBarometerAltitudeMeters ?? (position.altitude.isFinite ? position.altitude : null);
+    // NEU (README Abschnitt 55): Die Höhe landet erst im Track, wenn sie
+    // genau genug ist - Positionsdaten sind davon NICHT betroffen. Mit
+    // Barometer: erst ab der ersten gegen brauchbares GPS kalibrierten
+    // Höhe. Ohne Barometer: GPS-Höhe nur bei ausreichender
+    // Höhengenauigkeit (0 = keine Angabe des Systems, wird akzeptiert).
+    double? baseAltitude;
+    if (_currentBarometerAltitudeMeters != null) {
+      baseAltitude = _currentBarometerAltitudeMeters;
+    } else if (_barometerUnavailable && gpsReference != null) {
+      final accuracy = position.altitudeAccuracy;
+      final usable = !accuracy.isFinite || accuracy <= 0 || accuracy <= _maxUsableGpsAltitudeAccuracyMeters;
+      if (usable) baseAltitude = gpsReference;
+    }
+    // Manueller Versatz (README Abschnitt 54) nur auf den Endwert.
+    final altitude = baseAltitude != null ? correction.display(baseAltitude) : null;
 
     // NEU (README Abschnitt 29): Momentan-Geschwindigkeit für das
     // Geschwindigkeitsprofil - dieselbe Behandlung von Messrauschen

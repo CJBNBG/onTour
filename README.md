@@ -2855,26 +2855,76 @@ Links können sich ändern (Anbieter-Webseiten).
   (`legendUrl`, `legendHints`)
 - `lib/ui/track_page.dart`, `lib/ui/track_detail_page.dart`
 
-## Paketinhalt dieser ZIP
+## 54. Höhenkorrektur: NN-Umrechnung (Android 14+) und manuelle Kalibrierung
 
-`AndroidManifest.xml` liegt unter `native_android/` (Ziel:
-`android/app/src/main/AndroidManifest.xml`). Die Icon-Dateien
-(`assets/icon/*.png`) sind NICHT enthalten und müssen aus dem bestehenden
-Projekt übernommen werden. `pubspec.yaml` ist unverändert (Version 1.0.0+16).
+**Problem:** Die angezeigte Höhe lag bei mehreren Testern deutlich daneben
+(z. B. in Linsburg gut 20 m zu hoch). GPS misst über dem WGS84-Ellipsoid, nicht
+über NN; in Norddeutschland liegt das Geoid ca. 45-47 m darüber. Je nach Gerät
+liefert `Position.altitude` Ellipsoid- oder NN-Höhe. Zusätzlich übernahm der
+Barometer (Abschnitt 44) die erste GPS-Höhe als festen Referenzpunkt, ein
+Anfangsfehler blieb also dauerhaft erhalten. Die genaue Ursache ist noch nicht
+bestätigt - das Diagnose-Protokoll (siehe unten) soll das klären.
 
-**Diese ZIP (Abschnitte 46 bis 48):** enthält nur die geänderten bzw. neuen
-Dateien (`lib/models/compass_reading.dart`, `lib/models/pressure_reading.dart`,
-`lib/services/compass_service.dart`, `lib/services/pressure_trend_service.dart`,
-`lib/ui/compass_page.dart`, `lib/ui/compass_calibration_page.dart`,
-`lib/ui/home_shell.dart`) sowie diese `README.md`; alle übrigen Dateien
-bleiben unverändert aus dem bestehenden Projekt. `pubspec.yaml` ist
-unverändert (`sensors_plus` und `path_provider` sind bereits eingebunden).
+**Stufe 1 - automatische NN-Korrektur (`services/altitude_correction.dart`):**
+Neuer MethodChannel `ontour/altitude` (Methode `mslAltitude`, registriert in
+`OnTourApplication`). Er liest den letzten GPS-Fix (`getLastKnownLocation`) und
+liefert `Location.getAltitude()` (derselbe Wert wie `Position.altitude`) sowie
+`getMslAltitudeMeters()` (ab Android 14). Die Differenz ist die Korrektur; sie
+wird auf die GPS-Höhe addiert, bevor sie als Barometer-Referenz oder Trackpunkt
+dient. Liefert ein Gerät `altitude` bereits als NN-Höhe, ergibt sich ca. 0.
+Abfrage höchstens alle 5 min (bis zum ersten Erfolg alle 20 s). Korrekturen
+über ±110 m werden verworfen. Unter Android < 14 gibt es keine Korrektur.
 
-**Diese ZIP (Abschnitte 49 und 50):** enthält die für die automatische Pause
-(Abschnitt 49) und die Ortssuche (Abschnitt 50) geänderten bzw. neuen Dateien
-sowie diese `README.md`; alle übrigen Dateien bleiben unverändert aus dem
-bestehenden Projekt.
+**Stufe 2 - manueller Versatz:** Kompass-Seite, Symbol "Höhe kalibrieren": bekannte
+Höhe eingeben, der Versatz zur angezeigten Höhe wird in `AppPreferences`
+(`altitudeManualOffsetMeters`) gespeichert und nur auf den Endwert (Anzeige und
+Trackpunkte) addiert. Zurücksetzen im Dialog oder unter Einstellungen →
+Erweitert. Am besten einige Minuten nach dem Start kalibrieren, weil der
+Barometer seinen Versatz zu GPS erst langsam (120 s) findet.
 
-**Diese ZIP (Abschnitte 51 bis 53):** enthält die für die wählbaren Basiskarten neuen
-bzw. geänderten Dateien sowie diese `README.md`; alle übrigen Dateien bleiben
-unverändert aus dem bestehenden Projekt.
+**Diagnose:** In Nicht-Release-Builds schreibt `refreshIfDue` Android-Höhe,
+MSL-Höhe, Korrektur, `Position.altitude`, angezeigte Höhe und manuellen Versatz
+ins Diagnose-Protokoll (Abschnitt 34). Der Kalibrierdialog zeigt Korrektur und
+Versatz auch in Release-Builds.
+
+**Betroffene/neue Dateien:** `lib/services/altitude_correction.dart` (NEU),
+`lib/services/app_preferences.dart`, `lib/services/track_recording_service.dart`,
+`lib/ui/compass_page.dart`, `lib/ui/settings_page.dart`,
+`native_android/.../OnTourApplication.kt`.
+
+## 55. Höhenkorrektur: NN-Umrechnung (Android 14+) und manuelle Kalibrierung
+
+**Problem:** Die angezeigte Höhe lag bei mehreren Testern deutlich daneben
+(z. B. in Linsburg gut 20 m zu hoch). GPS misst über dem WGS84-Ellipsoid, nicht
+über NN; in Norddeutschland liegt das Geoid ca. 45-47 m darüber. Je nach Gerät
+liefert `Position.altitude` Ellipsoid- oder NN-Höhe. Zusätzlich übernahm der
+Barometer (Abschnitt 44) die erste GPS-Höhe als festen Referenzpunkt, ein
+Anfangsfehler blieb also dauerhaft erhalten. Die genaue Ursache ist noch nicht
+bestätigt - das Diagnose-Protokoll (siehe unten) soll das klären.
+
+**Stufe 1 - automatische NN-Korrektur (`services/altitude_correction.dart`):**
+Neuer MethodChannel `ontour/altitude` (Methode `mslAltitude`, registriert in
+`OnTourApplication`). Er liest den letzten GPS-Fix (`getLastKnownLocation`) und
+liefert `Location.getAltitude()` (derselbe Wert wie `Position.altitude`) sowie
+`getMslAltitudeMeters()` (ab Android 14). Die Differenz ist die Korrektur; sie
+wird auf die GPS-Höhe addiert, bevor sie als Barometer-Referenz oder Trackpunkt
+dient. Liefert ein Gerät `altitude` bereits als NN-Höhe, ergibt sich ca. 0.
+Abfrage höchstens alle 5 min (bis zum ersten Erfolg alle 20 s). Korrekturen
+über ±110 m werden verworfen. Unter Android < 14 gibt es keine Korrektur.
+
+**Stufe 2 - manueller Versatz:** Kompass-Seite, Symbol "Höhe kalibrieren": bekannte
+Höhe eingeben, der Versatz zur angezeigten Höhe wird in `AppPreferences`
+(`altitudeManualOffsetMeters`) gespeichert und nur auf den Endwert (Anzeige und
+Trackpunkte) addiert. Zurücksetzen im Dialog oder unter Einstellungen →
+Erweitert. Am besten einige Minuten nach dem Start kalibrieren, weil der
+Barometer seinen Versatz zu GPS erst langsam (120 s) findet.
+
+**Diagnose:** In Nicht-Release-Builds schreibt `refreshIfDue` Android-Höhe,
+MSL-Höhe, Korrektur, `Position.altitude`, angezeigte Höhe und manuellen Versatz
+ins Diagnose-Protokoll (Abschnitt 34). Der Kalibrierdialog zeigt Korrektur und
+Versatz auch in Release-Builds.
+
+**Betroffene/neue Dateien:** `lib/services/altitude_correction.dart` (NEU),
+`lib/services/app_preferences.dart`, `lib/services/track_recording_service.dart`,
+`lib/ui/compass_page.dart`, `lib/ui/settings_page.dart`,
+`native_android/.../OnTourApplication.kt`.

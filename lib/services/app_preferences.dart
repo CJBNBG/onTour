@@ -11,6 +11,7 @@ import '../models/speed_accuracy_mode.dart';
 import '../models/speed_display_style.dart';
 import '../models/speed_scale.dart';
 import '../models/speed_unit.dart';
+import 'altitude_correction.dart';
 
 /// Zentrale, persistierte App-Einstellungen: Anzeigemodus (System/Dark/
 /// Light), zuletzt gewählte Geschwindigkeits-Einheit, die gewählte
@@ -32,6 +33,7 @@ class AppPreferences extends ChangeNotifier {
   static const _positionDisplayFormatKey = 'positionDisplayFormat';
   static const _destinationKey = 'destination';
   static const _speedDisplayStyleKey = 'speedDisplayStyle';
+  static const _altitudeManualOffsetKey = 'altitudeManualOffsetMeters';
   static const _speedScaleMaxKeyPrefix = 'speedScaleMax_';
 
   ThemeMode _themeMode = ThemeMode.system;
@@ -43,6 +45,7 @@ class AppPreferences extends ChangeNotifier {
   int _autoPauseReminderMinutes = 3;
   PositionDisplayFormat _positionDisplayFormat = PositionDisplayFormat.dms;
   PlaceResult? _destination;
+  double _altitudeManualOffsetMeters = 0;
   SpeedDisplayStyle _speedDisplayStyle = SpeedDisplayStyle.digital;
   final Map<SpeedUnit, int> _speedScaleMax = {};
 
@@ -63,6 +66,11 @@ class AppPreferences extends ChangeNotifier {
   /// Ziel (Ortssuche bzw. langes Drücken auf die Karte) - null, wenn keins
   /// gesetzt ist. Bleibt über App-Neustarts erhalten.
   PlaceResult? get destination => _destination;
+
+  /// NEU (README Abschnitt 54): Vom Nutzer auf der Kompass-Seite ermittelter
+  /// Höhenversatz in Metern (0 = keiner). Wird auf die angezeigte und
+  /// aufgezeichnete Höhe addiert (siehe AltitudeCorrection).
+  double get altitudeManualOffsetMeters => _altitudeManualOffsetMeters;
 
   /// Darstellung der Geschwindigkeit auf der Tacho-Seite (digital/analog).
   SpeedDisplayStyle get speedDisplayStyle => _speedDisplayStyle;
@@ -173,7 +181,26 @@ class AppPreferences extends ChangeNotifier {
       }
     }
 
+    final storedAltitudeOffset = prefs.getDouble(_altitudeManualOffsetKey);
+    if (storedAltitudeOffset != null && storedAltitudeOffset.isFinite) {
+      _altitudeManualOffsetMeters = storedAltitudeOffset;
+    }
+    AltitudeCorrection.instance.manualOffsetMeters = _altitudeManualOffsetMeters;
+
     notifyListeners();
+  }
+
+  /// Setzt den manuellen Höhenversatz (0 = zurücksetzen).
+  Future<void> setAltitudeManualOffsetMeters(double meters) async {
+    _altitudeManualOffsetMeters = meters;
+    AltitudeCorrection.instance.manualOffsetMeters = meters;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    if (meters == 0) {
+      await prefs.remove(_altitudeManualOffsetKey);
+    } else {
+      await prefs.setDouble(_altitudeManualOffsetKey, meters);
+    }
   }
 
   Future<void> setSpeedDisplayStyle(SpeedDisplayStyle style) async {
