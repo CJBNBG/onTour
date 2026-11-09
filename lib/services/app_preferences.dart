@@ -11,6 +11,8 @@ import '../models/speed_accuracy_mode.dart';
 import '../models/speed_display_style.dart';
 import '../models/speed_scale.dart';
 import '../models/speed_unit.dart';
+import '../models/start_grid_columns.dart';
+import '../models/user_profile.dart';
 import 'altitude_correction.dart';
 
 /// Zentrale, persistierte App-Einstellungen: Anzeigemodus (System/Dark/
@@ -26,7 +28,9 @@ class AppPreferences extends ChangeNotifier {
   static const _themeModeKey = 'themeMode';
   static const _speedUnitKey = 'speedUnit';
   static const _speedAccuracyModeKey = 'speedAccuracyMode';
-  static const _mapNauticalModeKey = 'mapNauticalMode';
+  /// Nur noch zur einmaligen Übernahme alter Einstellungen (siehe [load],
+  /// README Abschnitt 60) - Seemarken sind seither ein Wert von RouteOverlay.
+  static const _legacyMapNauticalModeKey = 'mapNauticalMode';
   static const _mapStyleKey = 'mapStyle';
   static const _routeOverlayKey = 'routeOverlay';
   static const _autoPauseReminderMinutesKey = 'autoPauseReminderMinutes';
@@ -35,11 +39,14 @@ class AppPreferences extends ChangeNotifier {
   static const _speedDisplayStyleKey = 'speedDisplayStyle';
   static const _altitudeManualOffsetKey = 'altitudeManualOffsetMeters';
   static const _speedScaleMaxKeyPrefix = 'speedScaleMax_';
+  static const _userProfileKey = 'userProfile';
+  static const _profileUnitKeyPrefix = 'profileUnit_';
+  static const _profileSlotsKeyPrefix = 'profileSlots_';
+  static const _startGridColumnsKey = 'startGridColumns';
 
   ThemeMode _themeMode = ThemeMode.system;
   SpeedUnit _speedUnit = SpeedUnit.kilometersPerHour;
   SpeedAccuracyMode _speedAccuracyMode = SpeedAccuracyMode.balanced;
-  bool _mapNauticalMode = false;
   MapStyle _mapStyle = MapStyle.standard;
   RouteOverlay _routeOverlay = RouteOverlay.none;
   int _autoPauseReminderMinutes = 3;
@@ -48,6 +55,10 @@ class AppPreferences extends ChangeNotifier {
   double _altitudeManualOffsetMeters = 0;
   SpeedDisplayStyle _speedDisplayStyle = SpeedDisplayStyle.digital;
   final Map<SpeedUnit, int> _speedScaleMax = {};
+  UserProfile? _userProfile;
+  StartGridColumns _startGridColumns = StartGridColumns.auto;
+  final Map<UserProfile, SpeedUnit> _profileUnits = {};
+  final Map<UserProfile, List<SlotType>> _slots = {};
 
   ThemeMode get themeMode => _themeMode;
   SpeedUnit get speedUnit => _speedUnit;
@@ -72,24 +83,38 @@ class AppPreferences extends ChangeNotifier {
   /// aufgezeichnete Höhe addiert (siehe AltitudeCorrection).
   double get altitudeManualOffsetMeters => _altitudeManualOffsetMeters;
 
+  /// NEU (README Abschnitt 56): Auf der Start-Seite gewähltes Profil - null,
+  /// solange noch keins gewählt wurde.
+  UserProfile? get userProfile => _userProfile;
+
+  /// NEU (README Abschnitt 57): Spaltenanzahl der Kacheln auf der
+  /// Start-Seite (automatisch/1/2).
+  StartGridColumns get startGridColumns => _startGridColumns;
+
+  /// Belegung der Slots der Start-Seite für [profile] - die vom Nutzer
+  /// angepasste Liste, sonst die Standardbelegung des Profils.
+  List<SlotType> slotsFor(UserProfile profile) =>
+      List.unmodifiable(_slots[profile] ?? profile.defaultSlots);
+
   /// Darstellung der Geschwindigkeit auf der Tacho-Seite (digital/analog).
   SpeedDisplayStyle get speedDisplayStyle => _speedDisplayStyle;
 
   /// Skalenende des analogen Tachos - je Einheit separat gespeichert.
   int speedScaleMax(SpeedUnit unit) => _speedScaleMax[unit] ?? SpeedScale.defaultFor(unit);
 
-  /// true = Seekarte (Landkarte + Seemarken-Overlay von OpenSeaMap),
-  /// false = normale Landkarte (siehe TrackPage/TrackDetailPage sowie
-  /// widgets/nautical_mode_button.dart).
-  bool get mapNauticalMode => _mapNauticalMode;
+  /// true, solange das Seemarken-Overlay (OpenSeaMap) eingeblendet ist
+  /// (siehe README Abschnitt 60). Nur noch eine abgeleitete Sicht auf
+  /// [routeOverlay] - Seemarken sind seither ein Wert der Overlay-Auswahl;
+  /// setzen lässt sich das nur über [setRouteOverlay].
+  bool get mapNauticalMode => _routeOverlay == RouteOverlay.seamarks;
 
   /// NEU (siehe README Abschnitt 51): Gewählte Basiskarte (Standard,
-  /// OpenTopoMap-R, Reit- und Wanderkarte). Das Seemarken-Overlay
-  /// ([mapNauticalMode]) lässt sich über jede davon legen.
+  /// OpenTopoMap-R, Reit- und Wanderkarte). Das Overlay ([routeOverlay]) lässt
+  /// sich über jede davon legen.
   MapStyle get mapStyle => _mapStyle;
 
-  /// NEU (siehe README Abschnitt 52): Gewähltes Routen-Overlay (Wander-/
-  /// Radrouten von Waymarked Trails), Standard: aus.
+  /// NEU (siehe README Abschnitt 52/60): Gewähltes Overlay über der Karte
+  /// (Aus, Wanderrouten, Radrouten oder Seemarken), Standard: aus.
   RouteOverlay get routeOverlay => _routeOverlay;
 
   /// Lädt zuvor gespeicherte Einstellungen (falls vorhanden). Muss einmal
@@ -122,11 +147,6 @@ class AppPreferences extends ChangeNotifier {
       );
     }
 
-    final storedMapNauticalMode = prefs.getBool(_mapNauticalModeKey);
-    if (storedMapNauticalMode != null) {
-      _mapNauticalMode = storedMapNauticalMode;
-    }
-
     final storedMapStyle = prefs.getString(_mapStyleKey);
     if (storedMapStyle != null) {
       _mapStyle = MapStyle.values.firstWhere(
@@ -141,6 +161,21 @@ class AppPreferences extends ChangeNotifier {
         (overlay) => overlay.name == storedRouteOverlay,
         orElse: () => RouteOverlay.none,
       );
+    }
+
+    // NEU (README Abschnitt 60): Der frühere, getrennte Seemarken-Schalter
+    // ist jetzt ein Wert der Overlay-Auswahl. War er eingeschaltet und ist
+    // sonst kein Overlay gewählt, bleiben die Seemarken sichtbar; war
+    // zusätzlich ein Routen-Overlay gewählt, bleibt dieses (beides zugleich
+    // gibt es nicht mehr). Der alte Schlüssel wird danach entfernt, sonst
+    // würde er bei jedem Start erneut greifen.
+    final legacyNautical = prefs.getBool(_legacyMapNauticalModeKey);
+    if (legacyNautical != null) {
+      if (legacyNautical && _routeOverlay == RouteOverlay.none) {
+        _routeOverlay = RouteOverlay.seamarks;
+        await prefs.setString(_routeOverlayKey, _routeOverlay.name);
+      }
+      await prefs.remove(_legacyMapNauticalModeKey);
     }
 
     final storedReminderMinutes = prefs.getInt(_autoPauseReminderMinutesKey);
@@ -178,6 +213,38 @@ class AppPreferences extends ChangeNotifier {
       final stored = prefs.getInt('$_speedScaleMaxKeyPrefix${unit.name}');
       if (stored != null && SpeedScale.isValid(unit, stored)) {
         _speedScaleMax[unit] = stored;
+      }
+    }
+
+    final storedGridColumns = prefs.getString(_startGridColumnsKey);
+    if (storedGridColumns != null) {
+      for (final columns in StartGridColumns.values) {
+        if (columns.name == storedGridColumns) _startGridColumns = columns;
+      }
+    }
+
+    final storedProfile = prefs.getString(_userProfileKey);
+    if (storedProfile != null) {
+      for (final profile in UserProfile.values) {
+        if (profile.name == storedProfile) _userProfile = profile;
+      }
+    }
+    for (final profile in UserProfile.values) {
+      final storedUnit = prefs.getString('$_profileUnitKeyPrefix${profile.name}');
+      if (storedUnit != null) {
+        for (final unit in SpeedUnit.values) {
+          if (unit.name == storedUnit) _profileUnits[profile] = unit;
+        }
+      }
+      final storedSlots = prefs.getStringList('$_profileSlotsKeyPrefix${profile.name}');
+      if (storedSlots != null) {
+        final parsed = <SlotType>[];
+        for (final name in storedSlots) {
+          for (final type in SlotType.values) {
+            if (type.name == name && !parsed.contains(type)) parsed.add(type);
+          }
+        }
+        if (parsed.isNotEmpty) _slots[profile] = parsed;
       }
     }
 
@@ -227,9 +294,84 @@ class AppPreferences extends ChangeNotifier {
 
   Future<void> setSpeedUnit(SpeedUnit unit) async {
     _speedUnit = unit;
+    // NEU (README Abschnitt 56): Jedes Profil merkt sich seine zuletzt
+    // gewählte Einheit.
+    final profile = _userProfile;
+    if (profile != null) _profileUnits[profile] = unit;
     notifyListeners();
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_speedUnitKey, unit.name);
+    if (profile != null) {
+      await prefs.setString('$_profileUnitKeyPrefix${profile.name}', unit.name);
+    }
+  }
+
+  /// NEU (README Abschnitt 56): Wählt das Profil der Start-Seite und stellt
+  /// die dafür zuletzt verwendete (sonst die Standard-)Tempo-Einheit ein.
+  /// Karte und Overlays bleiben dabei unberührt - dafür gibt es die
+  /// Kartenvorwahl ([applyMapPreset]).
+  Future<void> setUserProfile(UserProfile profile) async {
+    _userProfile = profile;
+    _speedUnit = _profileUnits[profile] ?? profile.defaultUnit;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_userProfileKey, profile.name);
+    await prefs.setString(_speedUnitKey, _speedUnit.name);
+  }
+
+  /// Ändert die Slot-Belegung eines Profils (Einstellungen → Start, siehe
+  /// README Abschnitt 57).
+  Future<void> setSlotsFor(UserProfile profile, List<SlotType> slots) async {
+    // Jede Anzeige höchstens einmal, Reihenfolge bleibt erhalten.
+    final unique = <SlotType>[];
+    for (final slot in slots) {
+      if (!unique.contains(slot)) unique.add(slot);
+    }
+    _slots[profile] = unique;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList(
+      '$_profileSlotsKeyPrefix${profile.name}',
+      [for (final slot in unique) slot.name],
+    );
+  }
+
+  Future<void> setStartGridColumns(StartGridColumns columns) async {
+    _startGridColumns = columns;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_startGridColumnsKey, columns.name);
+  }
+
+  /// Stellt die Standardbelegung eines Profils wieder her.
+  Future<void> resetSlotsFor(UserProfile profile) async {
+    _slots.remove(profile);
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('$_profileSlotsKeyPrefix${profile.name}');
+  }
+
+  /// true, wenn Basiskarte, Routen-Overlay und Seemarken bereits der
+  /// Kartenvorwahl von [profile] entsprechen.
+  bool isMapPresetActive(UserProfile profile) {
+    final style = profile.mapStyle;
+    if (style == null) return false;
+    return _mapStyle == style &&
+        _routeOverlay == (profile.routeOverlay ?? RouteOverlay.none);
+  }
+
+  /// Setzt Basiskarte, Routen-Overlay und Seemarken auf die Kartenvorwahl
+  /// von [profile] (gilt wie jede Kartenwahl für Track-Seite und
+  /// Track-Detailansicht).
+  Future<void> applyMapPreset(UserProfile profile) async {
+    final style = profile.mapStyle;
+    if (style == null) return;
+    _mapStyle = style;
+    _routeOverlay = profile.routeOverlay ?? RouteOverlay.none;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_mapStyleKey, _mapStyle.name);
+    await prefs.setString(_routeOverlayKey, _routeOverlay.name);
   }
 
   Future<void> setSpeedAccuracyMode(SpeedAccuracyMode mode) async {
@@ -237,13 +379,6 @@ class AppPreferences extends ChangeNotifier {
     notifyListeners();
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_speedAccuracyModeKey, mode.name);
-  }
-
-  Future<void> setMapNauticalMode(bool nautical) async {
-    _mapNauticalMode = nautical;
-    notifyListeners();
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_mapNauticalModeKey, nautical);
   }
 
   Future<void> setRouteOverlay(RouteOverlay overlay) async {

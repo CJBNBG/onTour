@@ -8,7 +8,6 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 
 import '../models/altitude_reading.dart';
 import '../models/compass_reading.dart';
-import '../models/position_display_format.dart';
 import '../models/speed_accuracy_mode.dart';
 import '../services/altitude_correction.dart';
 import '../services/altitude_service.dart';
@@ -16,22 +15,28 @@ import '../services/app_preferences.dart';
 import '../services/barometer_altitude_service.dart';
 import '../services/compass_service.dart';
 import '../services/pressure_trend_service.dart';
-import '../util/coordinate_formatter.dart';
 import 'compass_calibration_page.dart';
 import 'widgets/accuracy_badge.dart';
 import 'widgets/compass_dial.dart';
 import 'widgets/measurement_pulse_indicator.dart';
 import 'widgets/accuracy_text_style.dart';
 
-/// Zeigt die aktuelle Peilung (Himmelsrichtung) des Geräts, die aktuelle
-/// Höhe sowie die aktuelle Position an - Letztere in einem der vier
-/// wählbaren Formate (DMS/DMM/DD/UTM, siehe README Abschnitt 25,
-/// [PositionDisplayFormat]), sofern verfügbar.
+/// Zeigt die aktuelle Peilung (Himmelsrichtung) des Geräts als große
+/// Kompassrose samt Kursangabe.
 ///
-/// NEU (siehe README Abschnitt 39): Die Peilung kommt aus einer
-/// Gyro-Fusion (siehe CompassService) und ist dadurch ruhiger. Bei
-/// unplausiblem Magnetfeld erscheint in der Statuszeile der Chip
-/// "Kompass gestört" samt Hinweisdialog.
+/// NEU (README Abschnitt 58): Höhe, Luftdruck und Position stehen nicht mehr
+/// hier, sondern auf der Start-Seite (Abschnitt 56) - dadurch bekommt die
+/// Kompassrose fast den gesamten Platz der Seite. Die dafür nötigen Dienste
+/// (GPS-Höhe, Barometer) laufen hier weiter: Sie liefern den Standort für
+/// die Missweisung (Kurs auf geografisch Nord, Abschnitt 41) und die
+/// gemeldete Höhe an den Luftdruck-Trend (Abschnitt 47). Die
+/// Höhenkalibrierung (Abschnitt 54) liegt seit Abschnitt 61 in der
+/// Höhen-Kachel der Start-Seite.
+///
+/// Die Peilung kommt aus einer Gyro-Fusion (siehe CompassService, Abschnitt
+/// 46); bei unplausiblem Magnetfeld erscheint in der Statuszeile der Chip
+/// "Kompass gestört", Antippen öffnet die geführte Kalibrierung (Abschnitt
+/// 48).
 class CompassPage extends StatefulWidget {
   final AppPreferences preferences;
 
@@ -52,7 +57,6 @@ class _CompassPageState extends State<CompassPage> {
   StreamSubscription<CompassReading>? _compassSubscription;
   StreamSubscription<AltitudeReading>? _gpsAltitudeSubscription;
   StreamSubscription<AltitudeReading>? _barometerAltitudeSubscription;
-  StreamSubscription<void>? _pressureSubscription;
   CompassReading? _reading;
   AltitudeReading? _altitudeReading;
 
@@ -61,24 +65,6 @@ class _CompassPageState extends State<CompassPage> {
   /// GPS-Höhe auf die deutlich präzisere Barometer-Höhe (siehe
   /// BarometerAltitudeService für die Hintergründe).
   bool _usingBarometer = false;
-
-  /// NEU (README Abschnitt 55): true, wenn das Gerät keinen Drucksensor
-  /// liefert - dann bleibt es bei der GPS-Höhe.
-  bool _barometerUnavailable = false;
-
-  /// Zeitpunkt der ersten GPS-Höhenmessung dieser Seite - Grundlage für
-  /// den Hinweistext, solange noch keine brauchbare Höhe vorliegt.
-  DateTime? _firstGpsAltitudeAt;
-
-  /// Solange der Barometer noch keine gegen brauchbares GPS kalibrierte
-  /// Höhe liefert, wäre die rohe GPS-Höhe (anfangs/drinnen oft um
-  /// Dutzende Meter falsch) irreführend - stattdessen erscheint ein Text.
-  bool get _altitudePending =>
-      _altitudeReading != null && !_usingBarometer && !_barometerUnavailable;
-
-  /// Nach so langer Zeit ohne brauchbare Höhe lautet der Hinweis
-  /// "kein guter GPS-Empfang" statt "Warte auf ...".
-  static const Duration _pendingHintAfter = Duration(seconds: 90);
 
   /// Siehe README Abschnitt 37: Wird bei jeder neuen GPS- ODER
   /// Barometer-Höhenmessung erhöht - dient MeasurementPulseIndicator als
@@ -98,20 +84,21 @@ class _CompassPageState extends State<CompassPage> {
     if (!needsUpdate) return;
     _declinationLat = reading.latitude;
     _declinationLon = reading.longitude;
-    unawaited(_compassService.updateDeclination(
-      latitude: reading.latitude,
-      longitude: reading.longitude,
-      altitude: reading.altitudeMeters,
-    ));
+    // Nach der Ermittlung neu zeichnen, damit die Missweisung in der
+    // Anzeige erscheint (siehe [_declinationText]).
+    unawaited(_compassService
+        .updateDeclination(
+          latitude: reading.latitude,
+          longitude: reading.longitude,
+          altitude: reading.altitudeMeters,
+        )
+        .then((_) {
+      if (mounted) setState(() {});
+    }));
   }
 
   static final NumberFormat _degreeFormat = NumberFormat('0', 'de_DE');
-  static final NumberFormat _altitudeFormatGps = NumberFormat('0', 'de_DE');
-  static final NumberFormat _altitudeFormatBarometer = NumberFormat('0.0', 'de_DE');
-  static final NumberFormat _pressureFormat = NumberFormat('0.0', 'de_DE');
-
-  /// Mit explizitem Vorzeichen (+/-) für die Druckänderung.
-  static final NumberFormat _pressureChangeFormat = NumberFormat('+0.0;-0.0', 'de_DE');
+  static final NumberFormat _declinationFormat = NumberFormat('0.0', 'de_DE');
 
   @override
   void initState() {
@@ -125,12 +112,6 @@ class _CompassPageState extends State<CompassPage> {
         setState(() => _reading = reading);
       });
     }
-    // NEU (README Abschnitt 47): Der Verlauf selbst läuft in HomeShell
-    // weiter - diese Seite zeigt nur den aktuellen Stand an.
-    _pressureSubscription = widget.pressureService.updates.listen((_) {
-      if (!mounted) return;
-      setState(() {});
-    });
     _initializeAltitude();
   }
 
@@ -152,7 +133,6 @@ class _CompassPageState extends State<CompassPage> {
       ));
       final reference = correction.gpsReference(reading.altitudeMeters);
       final shown = _withAltitude(reading, correction.display(reference));
-      _firstGpsAltitudeAt ??= DateTime.now();
       _barometerAltitudeService.calibrate(
         referenceAltitudeMeters: reference,
         referenceLatitude: reading.latitude,
@@ -190,10 +170,7 @@ class _CompassPageState extends State<CompassPage> {
       // Sensor gemeldeter Fehler (z. B. Gerät ohne Barometer) als
       // unbehandelter Stream-Fehler durchschlagen. In diesem Fall bleibt
       // es einfach bei der GPS-Höhe.
-      onError: (Object error) {
-        if (!mounted) return;
-        setState(() => _barometerUnavailable = true);
-      },
+      onError: (Object error) {},
     );
   }
 
@@ -207,95 +184,11 @@ class _CompassPageState extends State<CompassPage> {
         timestamp: r.timestamp,
       );
 
-  static String _signed(double v) => '${v >= 0 ? '+' : ''}${_altitudeFormatBarometer.format(v)}';
-
-  /// NEU (README Abschnitt 54): Dialog zur manuellen Höhenkalibrierung.
-  /// Der Nutzer gibt eine bekannte Höhe (m ü. NN) ein, der Versatz zur
-  /// aktuell angezeigten Höhe wird gespeichert. Bewusst normale Text-
-  /// Widgets im AlertDialog (siehe README Abschnitt 13).
-  Future<void> _openAltitudeCalibration() async {
-    final shown = _altitudeReading?.altitudeMeters;
-    final messenger = ScaffoldMessenger.of(context);
-    if (shown == null) {
-      messenger.showSnackBar(const SnackBar(content: Text('Noch keine Höhe verfügbar.')));
-      return;
-    }
-    if (_altitudePending) {
-      messenger.showSnackBar(const SnackBar(content: Text('Die Höhe wird noch ermittelt - bitte kurz warten.')));
-      return;
-    }
-    final correction = AltitudeCorrection.instance;
-    final currentOffset = widget.preferences.altitudeManualOffsetMeters;
-    final controller = TextEditingController();
-
-    final action = await showDialog<String>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        scrollable: true,
-        title: const Text('Höhe kalibrieren'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Gib die tatsächliche Höhe deines Standorts ein (m ü. NN, z. B. von '
-              'einem Höhenpunkt oder einer Karte). Am besten nach einigen Minuten '
-              'im Freien.',
-            ),
-            const SizedBox(height: 12),
-            Text('Angezeigt: ${_altitudeFormatBarometer.format(shown)} m'),
-            Text(
-              correction.hasMslCorrection
-                  ? 'NN-Korrektur (Android): ${_signed(correction.mslCorrectionMeters)} m'
-                  : (correction.mslSupported
-                      ? 'NN-Korrektur (Android): noch nicht ermittelt'
-                      : 'NN-Korrektur (Android): erst ab Android 14'),
-            ),
-            Text('Manueller Versatz: ${_signed(currentOffset)} m'),
-            const SizedBox(height: 12),
-            TextField(
-              controller: controller,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
-              decoration: const InputDecoration(
-                labelText: 'Tatsächliche Höhe',
-                suffixText: 'm',
-                border: OutlineInputBorder(),
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.of(dialogContext).pop('cancel'), child: const Text('Abbrechen')),
-          if (currentOffset != 0)
-            TextButton(onPressed: () => Navigator.of(dialogContext).pop('reset'), child: const Text('Zurücksetzen')),
-          FilledButton(onPressed: () => Navigator.of(dialogContext).pop('apply'), child: const Text('Übernehmen')),
-        ],
-      ),
-    );
-
-    final text = controller.text;
-    controller.dispose();
-    if (!mounted || action == null || action == 'cancel') return;
-
-    if (action == 'reset') {
-      await widget.preferences.setAltitudeManualOffsetMeters(0);
-      return;
-    }
-    final known = double.tryParse(text.trim().replaceAll(',', '.'));
-    if (known == null || known < -500 || known > 9000) {
-      messenger.showSnackBar(const SnackBar(content: Text('Ungültige Höhe.')));
-      return;
-    }
-    // Angezeigt = Rohwert + currentOffset, gewünscht = known.
-    await widget.preferences.setAltitudeManualOffsetMeters(known - shown + currentOffset);
-  }
-
   @override
   void dispose() {
     _compassSubscription?.cancel();
     _gpsAltitudeSubscription?.cancel();
     _barometerAltitudeSubscription?.cancel();
-    _pressureSubscription?.cancel();
     // NEU (README Abschnitt 39): CompassService hält jetzt mehrere
     // Sensor-Subscriptions (Gyro, Beschleunigung, Magnetometer) und
     // einen Controller und muss deshalb freigegeben werden.
@@ -304,39 +197,6 @@ class _CompassPageState extends State<CompassPage> {
     unawaited(_barometerAltitudeService.dispose());
     WakelockPlus.disable();
     super.dispose();
-  }
-
-  /// Haupttext der Höhenanzeige (OHNE Genauigkeit - die steht in einem
-  /// eigenen, kleineren Text-Widget, siehe [_altitudeAccuracyText]) - die
-  /// Höhe wird als Meter über Normal-Null angegeben (Abkürzung "ü. NN").
-  /// "Höhe: nicht verfügbar", solange keine Standort-Berechtigung besteht
-  /// bzw. noch kein Wert vorliegt, sonst z. B. "Höhe: 512,3 m ü. NN"
-  /// bzw. ohne Barometer "Höhe: 512 m ü. NN".
-  String get _altitudeText {
-    final reading = _altitudeReading;
-    if (reading == null) return 'Höhe: nicht verfügbar';
-    if (_altitudePending) return 'Höhe: wird ermittelt …';
-
-    final format = _usingBarometer ? _altitudeFormatBarometer : _altitudeFormatGps;
-    return 'Höhe: ${format.format(reading.altitudeMeters)} m ü. NN';
-  }
-
-  /// Genauigkeit der Höhenangabe - bewusst getrennt von [_altitudeText],
-  /// da sie in einem eigenen, kleineren Text-Widget erscheint (siehe
-  /// build()), analog zur Genauigkeit der Kursangabe.
-  String get _altitudeAccuracyText {
-    final reading = _altitudeReading;
-    if (_altitudePending) {
-      final since = _firstGpsAltitudeAt;
-      final waitedLong = since != null && DateTime.now().difference(since) > _pendingHintAfter;
-      return waitedLong ? 'Kein guter GPS-Empfang (z. B. im Gebäude)' : 'Warte auf genaues GPS-Signal';
-    }
-    if (reading == null || reading.altitudeAccuracyMeters == null) {
-      return 'Genauigkeit: unbekannt';
-    }
-    final format = _usingBarometer ? _altitudeFormatBarometer : _altitudeFormatGps;
-    final source = _usingBarometer ? 'Barometer' : 'GPS';
-    return 'Genauigkeit: ± ${format.format(reading.altitudeAccuracyMeters!)} m ($source)';
   }
 
   /// NEU (README Abschnitt 39): Genauigkeitszeile der Kursangabe - bei
@@ -351,47 +211,20 @@ class _CompassPageState extends State<CompassPage> {
     return 'Genauigkeit: unbekannt';
   }
 
-  /// NEU (README Abschnitt 47): Hauptzeile der Luftdruckanzeige - der am
-  /// Gerät GEMESSENE Druck (Stationsdruck), nicht der auf Meereshöhe
-  /// umgerechnete Druck aus Wetterberichten. "nicht verfügbar", solange
-  /// noch kein Messwert vorliegt bzw. das Gerät kein Barometer besitzt.
-  String get _pressureText {
-    final reading = widget.pressureService.current;
-    if (reading == null) return 'Luftdruck: nicht verfügbar';
-    return 'Luftdruck: ${_pressureFormat.format(reading.hPa)} hPa';
+  /// NEU (README Abschnitt 59): Die für den Standort ermittelte Missweisung
+  /// (Deklination), um die der Magnetkurs auf geografisch Nord korrigiert
+  /// wird - "O" = Ostmissweisung (magnetisch Nord liegt östlich von
+  /// geografisch Nord), "W" = Westmissweisung. Solange sie fehlt (noch kein
+  /// Standort), ist der angezeigte Kurs der magnetische.
+  String get _declinationText {
+    final declination = _compassService.declinationDegrees;
+    if (declination == null) return 'Missweisung: unbekannt (magnetischer Kurs)';
+    final direction = declination >= 0 ? 'O' : 'W';
+    return 'Missweisung: ${_declinationFormat.format(declination.abs())}° $direction';
   }
 
-  /// Trendzeile unter dem Luftdruck (3-Stunden-Tendenz, siehe
-  /// PressureTrendService) - bewusst im kleineren Genauigkeits-Stil.
-  String get _pressureTrendText {
-    final reading = widget.pressureService.current;
-    if (reading == null) return 'Trend: unbekannt';
-    final category = reading.category;
-    final change = reading.changePer3hHPa;
-    if (category == null || change == null) return 'Trend: sammle Daten …';
-    return '${category.arrow} ${category.label}: '
-        '${_pressureChangeFormat.format(change)} hPa / 3 h';
-  }
-
-  /// Zusatzhinweis zum Trend - nur wenn nötig (Verlauf kürzer als 3
-  /// Stunden bzw. Höhenänderung im Fenster), sonst null (keine Zeile).
-  String? get _pressureTrendNote {
-    final reading = widget.pressureService.current;
-    if (reading == null || reading.changePer3hHPa == null) return null;
-    final notes = <String>[];
-    final basis = reading.trendBasis;
-    if (basis != null && basis < const Duration(hours: 2, minutes: 45)) {
-      notes.add('Basis: ${basis.inMinutes} min');
-    }
-    if (reading.altitudeChanged) {
-      notes.add('Höhe geändert - Trend unsicher');
-    }
-    return notes.isEmpty ? null : notes.join(' · ');
-  }
-
-  /// Textstil für Genauigkeitsangaben (Kurs, Höhe UND Position) - zwei
-  /// Drittel der Schriftgröße der jeweils zugehörigen Hauptangabe
-  /// (displaySmall), klar untergeordnet, aber gut lesbar.
+  /// Textstil der Genauigkeitsangabe unter dem Kurs (einheitlich für alle
+  /// Seiten, siehe widgets/accuracy_text_style.dart).
   // TextStyle? _accuracyStyle(BuildContext context) {
   //   final base = Theme.of(context).textTheme.displaySmall;
   //   final baseFontSize = base?.fontSize;
@@ -401,30 +234,6 @@ class _CompassPageState extends State<CompassPage> {
   //   return base.copyWith(fontSize: baseFontSize * 2 / 3);
   // }
   TextStyle? _accuracyStyle(BuildContext context) => accuracyTextStyle(context);
-
-  /// Positionszeilen im aktuell gewählten Format (siehe README Abschnitt
-  /// 25, [PositionDisplayFormat]) - GENAU EINE Zeile bei UTM, sonst ZWEI
-  /// Zeilen (Breite, dann Länge). Der Fallback-Text ohne vorliegende
-  /// Messung passt sich derselben Zeilenanzahl an, damit der Textblock
-  /// nicht "springt", sobald der erste GPS-Fix eintrifft.
-  List<String> get _positionLines {
-    final reading = _altitudeReading;
-    final format = widget.preferences.positionDisplayFormat;
-    if (reading == null) {
-      return format == PositionDisplayFormat.utm ? const ['Position: nicht verfügbar'] : const ['Breite: nicht verfügbar', 'Länge: nicht verfügbar'];
-    }
-    return CoordinateFormatter.formatPosition(reading.latitude, reading.longitude, format);
-  }
-
-  /// Genauigkeit der aktuellen Position (horizontal, bezieht sich auf
-  /// Breite/Länge GEMEINSAM) - steht unterhalb der Positionsangabe.
-  String get _positionAccuracyText {
-    final reading = _altitudeReading;
-    if (reading == null || reading.positionAccuracyMeters == null) {
-      return 'Genauigkeit: unbekannt';
-    }
-    return 'Genauigkeit: ± ${_altitudeFormatGps.format(reading.positionAccuracyMeters!)} m';
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -453,82 +262,50 @@ class _CompassPageState extends State<CompassPage> {
     // derselben Schriftart/-größe erscheinen.
     final headingText = 'Kurs: ${_degreeFormat.format(heading)}°';
 
-    // README Abschnitt 25: ListenableBuilder sorgt dafür, dass ein
-    // Wechsel des Positionsformats in den Einstellungen SOFORT sichtbar
-    // wird.
-    return ListenableBuilder(
-      listenable: widget.preferences,
-      builder: (context, _) => _buildBody(context, heading, headingText),
-    );
+    return _buildBody(context, heading, headingText);
   }
 
+  /// Seitenlayout: Statuszeile oben, darunter die Kompassrose, die den
+  /// gesamten übrigen Platz einnimmt (quadratisch, höchstens 600 dp), und
+  /// unten die Kursangabe. Die Rose wird per LayoutBuilder aus dem
+  /// tatsächlich verfügbaren Platz berechnet; der Textblock bleibt über
+  /// FittedBox(scaleDown) auch bei großer Systemschrift in der Breite.
   Widget _buildBody(BuildContext context, double heading, String headingText) {
     return SafeArea(
       child: Padding(
-        padding: const EdgeInsets.all(24),
+        padding: const EdgeInsets.all(16),
         child: Column(
           children: [
             // README Abschnitt 37: Zeigt die auf dieser Seite AKTUELL
             // verwendete Genauigkeitsstufe (fest die von AltitudeService
             // verwendete) sowie einen kurzen optischen Impuls bei jeder
-            // neuen Höhenmessung. NEU (Abschnitt 39): in der Mitte der
-            // Chip "Kompass gestört", solange das Magnetfeld unplausibel
-            // ist.
+            // neuen Standortmessung. In der Mitte (nur bei Störung) der
+            // Chip "Kompass gestört".
             _buildStatusRow(context),
             const SizedBox(height: 12),
             Expanded(
-              // Größenadaptives Layout (README Abschnitt 10/28): Der
-              // verfügbare Platz wird per LayoutBuilder zur Laufzeit
-              // gemessen, die Kompassrose bekommt eine daraus berechnete,
-              // garantiert passende Größe, und der komplette Textblock
-              // wird über FittedBox(scaleDown) so weit verkleinert, dass
-              // er IMMER in den verbleibenden Platz passt.
               child: LayoutBuilder(
                 builder: (context, constraints) {
-                  final availableWidth = constraints.maxWidth;
-                  final availableHeight = constraints.maxHeight;
-
-                  // Kompassrose: quadratisch, max. 80 % der verfügbaren
-                  // Breite und ca. 48 % der verfügbaren Höhe (README
-                  // Abschnitt 28).
                   const minDialSize = 120.0;
-                  const maxDialSize = 360.0;
-                  const maxWidthFraction = 0.8;
-                  final dialSize = math.min(availableWidth * maxWidthFraction, availableHeight * 0.48).clamp(minDialSize, maxDialSize).toDouble();
-
-                  // Rest der Höhe (abzüglich eines kleinen Mindestabstands)
-                  // steht dem Textblock zur Verfügung.
-                  const gap = 16.0;
-                  final textBlockMaxHeight = (availableHeight - dialSize - gap).clamp(60.0, availableHeight).toDouble();
-
-                  return Stack(
-                    children: [
-                      Align(
-                        alignment: Alignment.topCenter,
-                        child: SizedBox(
-                          width: dialSize,
-                          height: dialSize,
-                          child: CompassDial(headingDegrees: heading),
-                        ),
-                      ),
-                      Align(
-                        alignment: Alignment.bottomCenter,
-                        child: ConstrainedBox(
-                          constraints: BoxConstraints(
-                            maxWidth: availableWidth,
-                            maxHeight: textBlockMaxHeight,
-                          ),
-                          child: FittedBox(
-                            fit: BoxFit.scaleDown,
-                            alignment: Alignment.bottomCenter,
-                            child: _buildTextBlock(context, headingText),
-                          ),
-                        ),
-                      ),
-                    ],
+                  const maxDialSize = 600.0;
+                  final dialSize = math
+                      .min(constraints.maxWidth, constraints.maxHeight)
+                      .clamp(minDialSize, maxDialSize)
+                      .toDouble();
+                  return Center(
+                    child: SizedBox(
+                      width: dialSize,
+                      height: dialSize,
+                      child: CompassDial(headingDegrees: heading),
+                    ),
                   );
                 },
               ),
+            ),
+            const SizedBox(height: 12),
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              child: _buildTextBlock(context, headingText),
             ),
           ],
         ),
@@ -560,15 +337,9 @@ class _CompassPageState extends State<CompassPage> {
             mainAxisSize: MainAxisSize.min,
             children: [
               // NEU (README Abschnitt 48): Immer erreichbar, nicht nur bei
-              // Störung - öffnet die geführte Kalibrierung.
-              IconButton(
-                tooltip: 'Höhe kalibrieren',
-                icon: const Icon(Icons.height),
-                iconSize: 20,
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints.tightFor(width: 28, height: 28),
-                onPressed: _openAltitudeCalibration,
-              ),
+              // Störung - öffnet die geführte Kalibrierung. (Die
+              // Höhenkalibrierung liegt seit README Abschnitt 61 in der
+              // Höhen-Kachel der Start-Seite.)
               IconButton(
                 tooltip: 'Kompass kalibrieren',
                 icon: const Icon(Icons.threesixty),
@@ -638,12 +409,9 @@ class _CompassPageState extends State<CompassPage> {
     );
   }
 
-  /// Der gesamte Textblock unterhalb der Kompassrose (Kurs, Höhe,
-  /// Position samt jeweiliger Genauigkeit) - als eigene Methode
-  /// ausgelagert, damit build() ihn unverändert per FittedBox skalieren
-  /// kann. Die internen Schriftgrößen (displaySmall für die Hauptwerte,
-  /// zwei Drittel davon für die Genauigkeitsangaben) bleiben auch bei
-  /// Verkleinerung durch das FittedBox im selben Verhältnis.
+  /// Textblock unterhalb der Kompassrose: nur noch die Kursangabe samt
+  /// Genauigkeit (README Abschnitt 58) - alle übrigen Angaben stehen auf der
+  /// Start-Seite.
   Widget _buildTextBlock(BuildContext context, String headingText) {
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -659,60 +427,10 @@ class _CompassPageState extends State<CompassPage> {
           _headingAccuracyText,
           style: _accuracyStyle(context),
         ),
-        const SizedBox(height: 8),
-        // Dieselbe Schriftart/-größe wie die Kursangabe oben
-        // (displaySmall) - die zugehörige Genauigkeit steht separat
-        // darunter.
+        const SizedBox(height: 2),
         AutoHyphenatingText(
-          _altitudeText,
-          style: Theme.of(context).textTheme.displaySmall,
-          textAlign: TextAlign.center,
-        ),
-        const SizedBox(height: 4),
-        AutoHyphenatingText(
-          _altitudeAccuracyText,
+          _declinationText,
           style: _accuracyStyle(context),
-          textAlign: TextAlign.center,
-        ),
-        const SizedBox(height: 8),
-        // NEU (README Abschnitt 47): Luftdruck (Stationsdruck) samt
-        // 3-Stunden-Trend - dieselbe Schriftgröße wie Kurs/Höhe, der
-        // Trend darunter im kleineren Genauigkeits-Stil.
-        AutoHyphenatingText(
-          _pressureText,
-          style: Theme.of(context).textTheme.displaySmall,
-          textAlign: TextAlign.center,
-        ),
-        const SizedBox(height: 4),
-        AutoHyphenatingText(
-          _pressureTrendText,
-          style: _accuracyStyle(context),
-          textAlign: TextAlign.center,
-        ),
-        if (_pressureTrendNote != null)
-          AutoHyphenatingText(
-            _pressureTrendNote!,
-            style: Theme.of(context).textTheme.bodyMedium,
-            textAlign: TextAlign.center,
-          ),
-        const SizedBox(height: 8),
-        // README Abschnitt 25: Positionszeile(n) im gewählten Format -
-        // ZWEI Zeilen (Breite, Länge) bei DMS/DMM/DD, EINE gemeinsame
-        // Zeile bei UTM (siehe _positionLines).
-        for (final line in _positionLines) ...[
-          AutoHyphenatingText(
-            line,
-            style: Theme.of(context).textTheme.displaySmall,
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 4),
-        ],
-        // Genauigkeit der Position - eine Zeile für Breite UND Länge
-        // gemeinsam, gilt für ALLE vier Formate.
-        AutoHyphenatingText(
-          _positionAccuracyText,
-          style: _accuracyStyle(context),
-          textAlign: TextAlign.center,
         ),
       ],
     );

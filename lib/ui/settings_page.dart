@@ -9,14 +9,19 @@ import '../models/speed_display_style.dart';
 import '../models/speed_accuracy_mode.dart';
 import '../models/speed_scale.dart';
 import '../models/speed_unit.dart';
+import '../models/start_grid_columns.dart';
+import '../models/user_profile.dart';
 import '../services/app_preferences.dart';
 import '../util/external_link.dart';
 import 'widgets/stacked_segment_label.dart';
 
-/// Einstellungsseite, unterteilt in zwei Unterreiter (NEU, siehe README
-/// Abschnitt 24):
+/// Einstellungsseite, unterteilt in Unterreiter (siehe README Abschnitt
+/// 24, seit Abschnitt 57 vier):
+/// - **Start** (erster Reiter, seit Abschnitt 62): Spalten der Start-Seite
+///   und Belegung der Anzeigen je Profil (README Abschnitt 57).
 /// - **Anzeige**: Anzeigemodus (System/Dark/Light) - die Einstellung, die
 ///   am ehesten "im Vorbeigehen" angepasst wird.
+/// - **Karten**: Basiskarte, Overlays, Quellen (Abschnitt 51/52).
 /// - **Erweitert**: seltener benötigte, technischere Einstellungen
 ///   (Genauigkeits-/Aktualitätsstufe der Geschwindigkeitsmessung sowie die
 ///   Erinnerung bei anhaltend pausierter Track-Aufzeichnung, siehe
@@ -39,7 +44,11 @@ class SettingsPage extends StatefulWidget {
 }
 
 class _SettingsPageState extends State<SettingsPage> with SingleTickerProviderStateMixin {
-  late final TabController _tabController = TabController(length: 3, vsync: this);
+  late final TabController _tabController = TabController(length: 4, vsync: this);
+
+  /// Profil, dessen Anzeigen im Unterreiter "Start" gerade bearbeitet
+  /// werden - null = das aktive Profil der Start-Seite.
+  UserProfile? _editProfile;
 
   /// Obergrenze der Pause-Erinnerung in Minuten (0 = aus).
   static const int _maxReminderMinutes = 120;
@@ -67,6 +76,7 @@ class _SettingsPageState extends State<SettingsPage> with SingleTickerProviderSt
             // analog zur bereits bestehenden Ausnahme bei SegmentedButton
             // (siehe README Abschnitt 13).
             tabs: const [
+              Tab(text: 'Start'),
               Tab(text: 'Anzeige'),
               Tab(text: 'Karten'),
               Tab(text: 'Erweitert'),
@@ -76,6 +86,7 @@ class _SettingsPageState extends State<SettingsPage> with SingleTickerProviderSt
             child: TabBarView(
               controller: _tabController,
               children: [
+                _buildStartTab(context),
                 _buildDisplayTab(context),
                 _buildMapsTab(context),
                 _buildAdvancedTab(context),
@@ -145,6 +156,190 @@ class _SettingsPageState extends State<SettingsPage> with SingleTickerProviderSt
         ],
         const SizedBox(height: 32),
         _buildPositionDisplayFormatSection(context),
+      ],
+    );
+  }
+
+  // ==== Unterreiter "Start" (README Abschnitt 57) ====
+
+  bool _sameSlots(List<SlotType> a, List<SlotType> b) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i] != b[i]) return false;
+    }
+    return true;
+  }
+
+  void _reorderSlots(UserProfile profile, List<SlotType> slots, int oldIndex, int newIndex) {
+    // onReorderItem liefert newIndex bereits um den entfernten Eintrag
+    // bereinigt - eine eigene Korrektur ist nicht mehr nötig.
+    final list = List.of(slots);
+    list.insert(newIndex, list.removeAt(oldIndex));
+    widget.preferences.setSlotsFor(profile, list);
+  }
+
+  Future<void> _addSlot(UserProfile profile) async {
+    final current = widget.preferences.slotsFor(profile);
+    final available = _availableSlots(profile, current);
+    if (available.isEmpty) return;
+
+    final chosen = await showModalBottomSheet<SlotType>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (final slot in available)
+              ListTile(
+                leading: Icon(slot.icon),
+                title: Text(slot.label),
+                onTap: () => Navigator.of(sheetContext).pop(slot),
+              ),
+          ],
+        ),
+      ),
+    );
+    if (chosen == null || !mounted) return;
+    // Neu lesen: Die Belegung kann sich währenddessen geändert haben.
+    await widget.preferences.setSlotsFor(
+      profile,
+      [...widget.preferences.slotsFor(profile), chosen],
+    );
+  }
+
+  /// Anzeigen, die für [profile] noch hinzugefügt werden können - die
+  /// Kartenvorwahl nur bei Profilen, die überhaupt eine Karte vorwählen.
+  List<SlotType> _availableSlots(UserProfile profile, List<SlotType> current) {
+    return [
+      for (final type in SlotType.values)
+        if (!current.contains(type) && (type != SlotType.mapPreset || profile.mapStyle != null)) type,
+    ];
+  }
+
+  /// Unterreiter "Start": Spaltenanzahl der Kacheln sowie Auswahl und
+  /// Reihenfolge der Anzeigen je Profil. Die Belegung wird sofort
+  /// gespeichert und wirkt sich beim nächsten Öffnen der Start-Seite aus.
+  Widget _buildStartTab(BuildContext context) {
+    final theme = Theme.of(context);
+    final prefs = widget.preferences;
+    final profile = _editProfile ?? prefs.userProfile ?? UserProfile.hiker;
+    final slots = prefs.slotsFor(profile);
+    final isDefault = _sameSlots(slots, profile.defaultSlots);
+    final canAdd = _availableSlots(profile, slots).isNotEmpty;
+
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        AutoHyphenatingText('Spalten der Kacheln', style: theme.textTheme.titleMedium),
+        const SizedBox(height: 8),
+        // Normales Text in den Segmenten, siehe README Abschnitt 13.
+        SizedBox(
+          width: double.infinity,
+          child: SegmentedButton<StartGridColumns>(
+            segments: const [
+              ButtonSegment(
+                value: StartGridColumns.auto,
+                label: StackedSegmentLabel(icon: Icons.devices, text: 'Auto'),
+              ),
+              ButtonSegment(
+                value: StartGridColumns.one,
+                label: StackedSegmentLabel(icon: Icons.view_agenda, text: '1 Spalte'),
+              ),
+              ButtonSegment(
+                value: StartGridColumns.two,
+                label: StackedSegmentLabel(icon: Icons.grid_view, text: '2 Spalten'),
+              ),
+            ],
+            showSelectedIcon: false,
+            selected: {prefs.startGridColumns},
+            onSelectionChanged: (selection) => prefs.setStartGridColumns(selection.first),
+          ),
+        ),
+        const SizedBox(height: 8),
+        AutoHyphenatingText(prefs.startGridColumns.description, style: theme.textTheme.bodySmall),
+        const SizedBox(height: 32),
+        AutoHyphenatingText('Anzeigen der Start-Seite', style: theme.textTheme.titleMedium),
+        const SizedBox(height: 8),
+        AutoHyphenatingText(
+          'Wähle ein Profil und lege fest, welche Anzeigen in welcher '
+          'Reihenfolge erscheinen. Das Griff-Symbol rechts gedrückt halten '
+          'und ziehen ändert die Reihenfolge.',
+          style: theme.textTheme.bodySmall,
+        ),
+        const SizedBox(height: 12),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final p in UserProfile.values)
+              ChoiceChip(
+                avatar: Icon(p.icon, size: 18),
+                label: Text(p.shortLabel),
+                selected: p == profile,
+                onSelected: (_) => setState(() => _editProfile = p),
+              ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        AutoHyphenatingText(profile.label, style: theme.textTheme.labelLarge),
+        const SizedBox(height: 4),
+        ReorderableListView(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          buildDefaultDragHandles: false,
+          onReorderItem: (oldIndex, newIndex) => _reorderSlots(profile, slots, oldIndex, newIndex),
+          children: [
+            for (var i = 0; i < slots.length; i++)
+              ListTile(
+                key: ValueKey(slots[i]),
+                contentPadding: EdgeInsets.zero,
+                leading: Icon(slots[i].icon),
+                // Bewusst normales Text-Widget (siehe README Abschnitt 13).
+                title: Text(slots[i].label),
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      tooltip: 'Entfernen',
+                      icon: const Icon(Icons.remove_circle_outline),
+                      // Mindestens eine Anzeige bleibt stehen.
+                      onPressed: slots.length > 1
+                          ? () => prefs.setSlotsFor(profile, [
+                                for (final s in slots)
+                                  if (s != slots[i]) s,
+                              ])
+                          : null,
+                    ),
+                    ReorderableDragStartListener(
+                      index: i,
+                      child: const Padding(
+                        padding: EdgeInsets.all(8),
+                        child: Icon(Icons.drag_handle),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          children: [
+            if (canAdd)
+              OutlinedButton.icon(
+                onPressed: () => _addSlot(profile),
+                icon: const Icon(Icons.add),
+                label: const Text('Anzeige hinzufügen'),
+              ),
+            if (!isDefault)
+              TextButton(
+                onPressed: () => prefs.resetSlotsFor(profile),
+                child: const Text('Standard wiederherstellen'),
+              ),
+          ],
+        ),
       ],
     );
   }
@@ -286,7 +481,7 @@ class _SettingsPageState extends State<SettingsPage> with SingleTickerProviderSt
           ),
         ),
         const SizedBox(height: 16),
-        AutoHyphenatingText('Routen einblenden', style: theme.textTheme.titleMedium),
+        AutoHyphenatingText('Einblenden', style: theme.textTheme.titleMedium),
         const SizedBox(height: 8),
         RadioGroup<RouteOverlay>(
           groupValue: widget.preferences.routeOverlay,
@@ -303,17 +498,6 @@ class _SettingsPageState extends State<SettingsPage> with SingleTickerProviderSt
                 ),
             ],
           ),
-        ),
-        const SizedBox(height: 16),
-        SwitchListTile(
-          contentPadding: EdgeInsets.zero,
-          title: AutoHyphenatingText('Seemarken einblenden'),
-          subtitle: AutoHyphenatingText(
-            'Bojen, Leuchttürme und Fahrwassermarkierungen (OpenSeaMap) über der '
-            'gewählten Karte. Keine amtliche Seekarte, keine Tiefenangaben.',
-          ),
-          value: widget.preferences.mapNauticalMode,
-          onChanged: widget.preferences.setMapNauticalMode,
         ),
         const SizedBox(height: 32),
         AutoHyphenatingText('Quellen und Nutzungshinweise', style: theme.textTheme.titleMedium),
@@ -391,7 +575,7 @@ class _SettingsPageState extends State<SettingsPage> with SingleTickerProviderSt
 
   /// NEU (README Abschnitt 54): Zeigt den manuellen Höhenversatz und erlaubt
   /// das Zurücksetzen. Die Kalibrierung selbst erfolgt auf der
-  /// Kompass-Seite (Symbol "Höhe kalibrieren" oben rechts), weil dort die
+  /// Start-Seite (Antippen der Höhen-Kachel, seit Abschnitt 61), weil dort die
   /// aktuell angezeigte Höhe bekannt ist.
   Widget _buildAltitudeCalibrationSection(BuildContext context) {
     final offset = widget.preferences.altitudeManualOffsetMeters;
@@ -404,8 +588,9 @@ class _SettingsPageState extends State<SettingsPage> with SingleTickerProviderSt
         AutoHyphenatingText(
           'Die Höhe wird automatisch auf Normalnull (NN) umgerechnet, sofern das Gerät '
           'das unterstützt (ab Android 14). Weicht sie trotzdem ab, kannst du sie auf '
-          'der Kompass-Seite mit dem Symbol "Höhe kalibrieren" an eine bekannte Höhe '
-          'anpassen.',
+          'der Start-Seite durch Antippen der Kachel "Höhe" an eine bekannte Höhe '
+          'anpassen. Die Kachel muss dafür im gewählten Profil belegt sein '
+          '(Einstellungen → Start).',
           style: Theme.of(context).textTheme.bodySmall,
         ),
         const SizedBox(height: 8),

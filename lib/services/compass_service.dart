@@ -22,6 +22,16 @@ class CompassService {
   /// dann bleibt es beim magnetischen Kurs wie bisher.
   double _declinationDegrees = 0;
 
+  /// true, sobald die Missweisung tatsächlich ermittelt wurde (siehe
+  /// [updateDeclination]) - vorher ist der Kurs noch der magnetische.
+  bool _hasDeclination = false;
+
+  /// Aktuell angewandte Missweisung in Grad (positiv = magnetisch Nord
+  /// liegt östlich von geografisch Nord, d. h. Ostmissweisung) - null,
+  /// solange sie noch nicht ermittelt werden konnte. Für die Anzeige auf
+  /// der Kompass-Seite.
+  double? get declinationDegrees => _hasDeclination ? _declinationDegrees : null;
+
   /// Ermittelt nativ (Android GeomagneticField, offline) die Deklination
   /// fuer den Standort - danach liefert [readingStream] den auf
   /// geografisch Nord korrigierten Kurs.
@@ -36,7 +46,10 @@ class CompassService {
         'longitude': longitude,
         'altitude': altitude,
       });
-      if (value != null) _declinationDegrees = value;
+      if (value != null) {
+        _declinationDegrees = value;
+        _hasDeclination = true;
+      }
     } catch (_) {
       // Reiner Zusatz - bei Fehlschlag bleibt es beim magnetischen Kurs.
     }

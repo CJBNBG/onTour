@@ -72,16 +72,6 @@ class MapLegendButton extends StatelessWidget {
                         hints: overlay.legendHints,
                         url: overlay.legendUrl,
                       ),
-                    if (preferences.mapNauticalMode)
-                      _section(
-                        context,
-                        title: 'Seemarken (OpenSeaMap)',
-                        hints: const [
-                          'Bojen, Leuchttürme und Fahrwassermarkierungen über der '
-                              'Karte - keine amtliche Seekarte, keine Tiefenangaben.',
-                        ],
-                        url: 'https://www.openseamap.org',
-                      ),
                     const Divider(height: 32),
                     AutoHyphenatingText('Symbole in onTour', style: theme.textTheme.titleMedium),
                     const SizedBox(height: 8),

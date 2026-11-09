@@ -27,8 +27,9 @@ const String _tileUserAgent = 'onTour/1.0 (de.clausjbauer.ontour)';
 /// gleich bleiben.
 ///
 /// NEU (README Abschnitt 51): [mapStyle] wählt die Basiskarte (Standard,
-/// OpenTopoMap-R, Reit- und Wanderkarte). Das Seemarken-Overlay lässt sich
-/// über jede davon legen. Bei Karten, deren Lizenz eine sichtbare
+/// OpenTopoMap-R, Reit- und Wanderkarte). [routeOverlay] legt darüber
+/// optional Wander-/Radrouten oder - seit README Abschnitt 60 - Seemarken.
+/// Bei Karten, deren Lizenz eine sichtbare
 /// Quellenangabe verlangt ([MapStyle.alwaysVisibleAttribution]), wird diese
 /// dauerhaft am Kartenrand angezeigt statt hinter dem Info-Symbol.
 ///
@@ -37,7 +38,10 @@ const String _tileUserAgent = 'onTour/1.0 (de.clausjbauer.ontour)';
 /// vorausschauendes Herunterladen ganzer Regionen sind unverändert wie in
 /// README Abschnitt 8/9 beschrieben - das gilt für alle Basiskarten.
 List<Widget> buildMapTileLayers({
-  required bool nauticalMode,
+  /// OHNE WIRKUNG seit README Abschnitt 60 (Seemarken sind ein Wert von
+  /// [routeOverlay]) - nur noch vorhanden, damit ältere Aufrufer
+  /// unverändert kompilieren; kann dort entfallen.
+  bool nauticalMode = false,
   MapStyle mapStyle = MapStyle.standard,
   RouteOverlay routeOverlay = RouteOverlay.none,
 }) {
@@ -45,7 +49,6 @@ List<Widget> buildMapTileLayers({
   final attributions = <MapAttribution>[
     ...mapStyle.attributions,
     if (overlayUrl != null) ...routeOverlay.attributions,
-    if (nauticalMode) const MapAttribution('Seemarken: © OpenSeaMap-Mitwirkende', 'https://www.openseamap.org'),
   ];
 
   return [
@@ -60,23 +63,12 @@ List<Widget> buildMapTileLayers({
         ),
       ),
     ),
-    // NEU (Abschnitt 52): Wander-/Radrouten (transparente Kacheln) über der
-    // Basiskarte, unter dem Seemarken-Overlay.
+    // NEU (Abschnitt 52/60): Wander-/Radrouten bzw. Seemarken (transparente
+    // Kacheln) über der Basiskarte.
     if (overlayUrl != null)
       TileLayer(
         urlTemplate: overlayUrl,
         maxNativeZoom: routeOverlay.maxNativeZoom,
-        userAgentPackageName: 'de.clausjbauer.ontour',
-        tileProvider: NetworkTileProvider(
-          headers: {'User-Agent': _tileUserAgent},
-          cachingProvider: BuiltInMapCachingProvider.getOrCreateInstance(
-            maxCacheSize: 300 * 1024 * 1024,
-          ),
-        ),
-      ),
-    if (nauticalMode)
-      TileLayer(
-        urlTemplate: 'https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png',
         userAgentPackageName: 'de.clausjbauer.ontour',
         tileProvider: NetworkTileProvider(
           headers: {'User-Agent': _tileUserAgent},

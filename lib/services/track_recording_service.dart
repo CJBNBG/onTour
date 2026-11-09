@@ -209,6 +209,61 @@ class TrackRecordingService {
   /// Siehe [_lastPositionReceivedAt].
   DateTime? get lastPositionReceivedAt => _lastPositionReceivedAt;
 
+  // ==== NEU (README Abschnitt 65): Gesundheitsprüfung der Aufzeichnung ====
+  // Hintergrund: Die Anzeige einer laufenden Aufzeichnung (roter Punkt auf
+  // der Start-Seite) soll sich darauf verlassen können, dass tatsächlich
+  // aufgezeichnet wird. [interruptionReason] erkennt, wenn der Zustand
+  // "aufzeichnend" nur noch äußerlich besteht (Stream ausgefallen, keine
+  // Positionen mehr).
+
+  /// So lange darf während aktiver Aufzeichnung keine Position eintreffen,
+  /// bevor eine Unterbrechung gemeldet wird. Bei Stillstand pausiert die
+  /// automatische Pause schon nach ca. 13 s (siehe
+  /// [_checkGpsStandstill]) - 30 s sind also deutlich mehr als ein
+  /// normaler Halt.
+  static const Duration _maxSilenceWhileRecording = Duration(seconds: 30);
+
+  /// Kurze Schonfrist nach Start/Fortsetzen, bis der Positions-Stream
+  /// tatsächlich steht (siehe [_minRestartGap]).
+  static const Duration _healthStartupGrace = Duration(seconds: 5);
+
+  DateTime? _listenRequestedAt;
+  String? _lastInterruptionReason;
+
+  /// null, solange die Aufzeichnung in Ordnung ist (oder keine läuft bzw.
+  /// manuell pausiert ist - dann wird kein Stream gebraucht). Sonst ein
+  /// kurzer Text, was nicht stimmt: Der Positions-Stream ist ausgefallen
+  /// (Neustart-Versuche laufen, siehe [_handleStreamError]) oder nicht
+  /// aktiv, oder es kam während aktiver Aufzeichnung länger als
+  /// [_maxSilenceWhileRecording] keine Position an (z. B. ohne GPS-Signal).
+  /// Bei automatischer Pause wird nur der Stream geprüft, nicht die
+  /// Positions-Pause (im Stand kommen wegen des distanceFilters keine
+  /// Punkte).
+  String? get interruptionReason {
+    if (_state == RecordingState.idle) return null;
+    if (_state == RecordingState.paused && !_autoPaused) return null;
+
+    if (_consecutiveStreamFailures > 0) {
+      return 'Positions-Stream unterbrochen - Neustart wird versucht';
+    }
+    final now = DateTime.now();
+    final requested = _listenRequestedAt;
+    if (requested != null && now.difference(requested) < _healthStartupGrace) return null;
+    if (_subscription == null) return 'Positions-Stream nicht aktiv';
+
+    if (_state == RecordingState.recording) {
+      var baseline = _lastPositionReceivedAt;
+      if (requested != null && (baseline == null || requested.isAfter(baseline))) {
+        baseline = requested;
+      }
+      baseline ??= _startTime;
+      if (baseline != null && now.difference(baseline) > _maxSilenceWhileRecording) {
+        return 'Seit über ${_maxSilenceWhileRecording.inSeconds} s keine Position empfangen';
+      }
+    }
+    return null;
+  }
+
   // ==== NEU: Checkpoint-Sicherung gegen Datenverlust ====
   // Siehe README für den Hintergrund: Bislang lebten die Punkte einer
   // laufenden Aufzeichnung AUSSCHLIESSLICH im Arbeitsspeicher - stirbt der
@@ -410,6 +465,8 @@ class TrackRecordingService {
     _retryTimer = null;
     _lastPositionReceivedAt = null;
     _lastCheckpointSavedAt = null;
+    _lastInterruptionReason = null;
+    _listenRequestedAt = DateTime.now();
     _startTime = DateTime.now();
     _state = RecordingState.recording;
     _updatesController.add(null);
@@ -469,6 +526,17 @@ class TrackRecordingService {
   /// aus, wenn der Beschleunigungssensor wegen Motorvibrationen im
   /// Leerlauf nie "Stillstand" meldet.
   void _checkGpsStandstill() {
+    // NEU (README Abschnitt 65): Gesundheitsprüfung im selben Sekundentakt -
+    // meldet Änderungen über [updates] (die Anzeige der Start-Seite
+    // reagiert darauf) und vermerkt sie im Diagnose-Protokoll.
+    final reason = interruptionReason;
+    if (reason != _lastInterruptionReason) {
+      _lastInterruptionReason = reason;
+      _updatesController.add(null);
+      unawaited(DiagnosticLogService.instance.log(
+        reason == null ? 'Aufzeichnung wieder in Ordnung' : 'WARNUNG: $reason',
+      ));
+    }
     if (_state != RecordingState.recording) {
       _gpsStandstillSince = null;
       return;
@@ -1041,6 +1109,7 @@ class TrackRecordingService {
     if (manual) {
       _manualResumeGraceUntil = DateTime.now().add(_manualResumeGracePeriod);
     }
+    _listenRequestedAt = DateTime.now();
     _state = RecordingState.recording;
     _updatesController.add(null);
     _startListening();
@@ -1088,6 +1157,7 @@ class TrackRecordingService {
     // NEU (siehe README Abschnitt 38): Grundlage für die Mindest-
     // Wartezeit in start(), siehe _minRestartGap.
     _lastStoppedAt = DateTime.now();
+    _lastInterruptionReason = null;
     _updatesController.add(null);
     unawaited(DiagnosticLogService.instance.log(
       'Beendet: "$name", ${_points.length} Punkte, '
@@ -1138,6 +1208,7 @@ class TrackRecordingService {
     _state = RecordingState.idle;
     // NEU (siehe README Abschnitt 38): siehe Kommentar in stop().
     _lastStoppedAt = DateTime.now();
+    _lastInterruptionReason = null;
     _updatesController.add(null);
   }
 

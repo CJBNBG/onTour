@@ -1,14 +1,18 @@
 import 'map_style.dart';
 
-/// Wählbares Routen-Overlay (Waymarked Trails) über der Basiskarte - zeigt
-/// ausgeschilderte Wander- bzw. Radrouten als farbige Linien (siehe README
-/// Abschnitt 52). Gegenseitig ausschließend ([none], [hiking], [cycling]),
-/// damit die Karte übersichtlich bleibt. Unabhängig vom Seemarken-Overlay
-/// (`AppPreferences.mapNauticalMode`).
+/// Wählbares Overlay über der Basiskarte: ausgeschilderte Wander- bzw.
+/// Radrouten (Waymarked Trails, siehe README Abschnitt 52) oder Seemarken
+/// (OpenSeaMap, seit README Abschnitt 60 gleichberechtigt in derselben
+/// Liste). Gegenseitig ausschließend ([none], [hiking], [cycling],
+/// [seamarks]), damit die Karte übersichtlich bleibt.
+///
+/// Der Typname ist aus historischen Gründen noch "RouteOverlay" (er stammt
+/// aus der Zeit, als es nur Routen gab) - fachlich ist es das
+/// "Einblenden"-Overlay der Karte.
 enum RouteOverlay {
   none(
     label: 'Aus',
-    description: 'Keine zusätzlichen Routen auf der Karte.',
+    description: 'Nichts zusätzlich über der Karte einblenden.',
   ),
 
   hiking(
@@ -50,6 +54,27 @@ enum RouteOverlay {
     legendHints: [
       'Ausgeschilderte Radrouten aus OpenStreetMap als farbige Linien über '
           'der Karte.',
+    ],
+  ),
+
+  seamarks(
+    label: 'Seemarken',
+    description: 'Bojen, Leuchttürme und Fahrwassermarkierungen (OpenSeaMap). '
+        'Keine amtliche Seekarte, keine Tiefenangaben.',
+    urlTemplate: 'https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png',
+    maxNativeZoom: 18,
+    attributions: [
+      MapAttribution('Seemarken: © OpenSeaMap-Mitwirkende', 'https://www.openseamap.org'),
+    ],
+    creditsLine: 'Seemarken-Overlay: OpenSeaMap (www.openseamap.org), '
+        '© OpenSeaMap-Mitwirkende. Daten: © OpenStreetMap-Mitwirkende.',
+    usageNote: 'Kostenloser Dienst eines Gemeinschaftsprojekts - bitte '
+        'zurückhaltend nutzen, kein Massen-Download.',
+    infoUrl: 'https://www.openseamap.org',
+    legendUrl: 'https://www.openseamap.org',
+    legendHints: [
+      'Bojen, Leuchttürme und Fahrwassermarkierungen über der Karte - keine '
+          'amtliche Seekarte, keine Tiefenangaben.',
     ],
   );
 

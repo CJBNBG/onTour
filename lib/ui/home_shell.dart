@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:auto_hyphenating_text/auto_hyphenating_text.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -11,13 +10,20 @@ import 'compass_page.dart';
 import 'info_page.dart';
 import 'settings_page.dart';
 import 'speed_page.dart';
+import 'start_page.dart';
 import 'track_page.dart';
 import '../services/device_status_service.dart';
-import 'widgets/app_status_bar.dart';
+import 'widgets/app_navigation_bar.dart';
+import 'widgets/satellite_indicator.dart';
 
 /// Rahmen der App: obere App-Leiste (mit Seitentitel und Info-Button) sowie
-/// untere Navigationsleiste zum Wechseln zwischen den vier
-/// Darstellungsseiten (Tacho / Kompass / Track / Einstellungen).
+/// untere Navigationsleiste zum Wechseln zwischen den fünf
+/// Darstellungsseiten (Start / Tacho / Kompass / Track / Einstellungen).
+///
+/// NEU (siehe README Abschnitt 56): Die Start-Seite (Profil-Leiste mit
+/// profilabhängigen Anzeigen) ist jetzt der erste Tab und zugleich der
+/// Start-Tab der App; Tacho, Kompass, Track und Einstellungen rücken
+/// jeweils um einen Platz nach hinten.
 ///
 /// WICHTIG: Die jeweils sichtbare Seite wird bewusst NICHT über einen
 /// IndexedStack im Hintergrund weiterlaufen gelassen, sondern beim
@@ -65,23 +71,29 @@ class HomeShell extends StatefulWidget {
 }
 
 class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
-  // Start-Tab ist bewusst "Tacho" (Index 0), da sie die Hauptfunktion der
-  // App darstellt und deshalb auch als Erstes in der Navigationsleiste
-  // steht.
+  // Start-Tab ist die Start-Seite (Index 0) - die Übersicht mit den
+  // Anzeigen des gewählten Profils (siehe README Abschnitt 56).
   int _selectedIndex = 0;
 
   /// Index des Track-Tabs - als benannte Konstante, damit
-  /// [_checkPendingNavigation] nicht mit einer "magischen" 2 arbeitet.
-  static const _trackTabIndex = 2;
+  /// [_checkPendingNavigation] nicht mit einer "magischen" Zahl arbeitet.
+  /// (Seit Abschnitt 56 an dritter Stelle, Index 3.)
+  // static const _startTabIndex = 0;
+  static const _tachoTabIndex = 1;
+  static const _compassTabIndex = 2;
+  static const _trackTabIndex = 3;
+  // static const _settingsTabIndex = 4;
+
+  /// Vollbild-Zustand der Karte auf der Track-Seite. Wird hier EINMAL
+  /// gehalten (nicht bei jedem Aufbau neu erzeugt!) und an TrackPage
+  /// durchgereicht: TrackPage schaltet ihn ein/aus, HomeShell blendet
+  /// darüber AppBar, Statuszeile und Navigationsleiste aus.
+  final ValueNotifier<bool> _trackFullscreen = ValueNotifier<bool>(false);
 
   // Siehe Klassenkommentar: lebt bewusst so lange wie HomeShell selbst,
   // nicht nur so lange wie die jeweils sichtbare TrackPage.
   final TrackRecordingService _trackRecordingService = TrackRecordingService();
   final DeviceStatusService _deviceStatus = DeviceStatusService();
-
-  /// NEU: true, solange die Karte der Track-Seite im Vollbild läuft - blendet
-  /// App-Leiste, Statusbereich und Navigationsleiste aus (siehe TrackPage).
-  final ValueNotifier<bool> _mapFullscreen = ValueNotifier<bool>(false);
 
   /// NEU (siehe README Abschnitt 47): Luftdruck-Verlauf für den
   /// 3-Stunden-Trend - lebt wie der TrackRecordingService bewusst so lange
@@ -89,7 +101,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
   /// jedem Seitenwechsel sonst verloren ginge.
   final PressureTrendService _pressureTrendService = PressureTrendService();
 
-  static const _titles = ['Tacho', 'Kompass', 'Track', 'Einstellungen'];
+  static const _titles = ['Start', 'Tacho', 'Kompass', 'Track', 'Einstellungen'];
 
   /// Siehe Klassenkommentar (Abschnitt 23) - Methodenname auf nativer
   /// Seite muss exakt übereinstimmen (OnTourApplication.kt).
@@ -142,59 +154,103 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     unawaited(_trackRecordingService.dispose());
     unawaited(_pressureTrendService.dispose());
     _deviceStatus.dispose();
-    _mapFullscreen.dispose();
+    _trackFullscreen.dispose();
     super.dispose();
+  }
+
+  /// Titel der AppBar: Name der angezeigten Seite, mit Gedankenstrich
+  /// getrennt das gewählte Profil (Kurzname, z. B. "Tacho – Segeln"); ohne
+  /// Profil nur der Seitenname. Eine Zeile - ist der Titel zu lang, wird
+  /// er per FittedBox verkleinert statt umzubrechen (die AppBar hat feste
+  /// Höhe). Hört selbst auf die Einstellungen, damit ein Profilwechsel
+  /// sofort im Titel erscheint.
+  Widget _buildAppBarTitle() {
+    return ListenableBuilder(
+      listenable: widget.preferences,
+      builder: (context, _) {
+        final profile = widget.preferences.userProfile;
+        final page = _titles[_selectedIndex];
+        final title = profile == null ? page : '$page – ${profile.shortLabel}';
+        return FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.centerLeft,
+          child: Text(title, maxLines: 1, softWrap: false),
+        );
+      },
+    );
   }
 
   @override
   Widget build(BuildContext context) {
+    // Vollbild gilt nur auf dem Track-Tab - sicherheitshalber daran
+    // gekoppelt, damit nach einem Tab-Wechsel nie Leisten fehlen, selbst
+    // wenn der Notifier einmal nicht rechtzeitig zurückgesetzt wurde.
     return ValueListenableBuilder<bool>(
-      valueListenable: _mapFullscreen,
-      builder: (context, fullscreen, _) => Scaffold(
-        appBar: fullscreen
-            ? null
-            : AppBar(
-                title: AutoHyphenatingText(_titles[_selectedIndex]),
-                actions: [
-                  IconButton(
-                    tooltip: 'Info',
-                    icon: const Icon(Icons.info_outline),
-                    onPressed: () => Navigator.of(context).push(
-                      MaterialPageRoute(builder: (context) => const InfoPage()),
+      valueListenable: _trackFullscreen,
+      builder: (context, fullscreen, _) {
+        final hideBars = fullscreen && _selectedIndex == _trackTabIndex;
+        return Scaffold(
+          // Eine gemeinsame AppBar für alle Seiten sorgt zum einen dafür,
+          // dass der Inhalt nie in den oberen Systembereich (Uhrzeit/Akku/
+          // Empfang) hineinragt - Scaffold+AppBar respektieren diesen
+          // Bereich automatisch -, zum anderen liefert sie auf jeder Seite
+          // denselben Info-Button oben rechts. Im Karten-Vollbild entfällt
+          // sie.
+          appBar: hideBars
+              ? null
+              : AppBar(
+                  title: _buildAppBarTitle(),
+                  actions: [
+                    // Satellitenzahl immer sichtbar, links neben dem
+                    // Info-Button (README Abschnitt 62).
+                    SatelliteIndicator(status: _deviceStatus),
+                    IconButton(
+                      tooltip: 'Info',
+                      icon: const Icon(Icons.info_outline),
+                      onPressed: () => Navigator.of(context).push(
+                        MaterialPageRoute(builder: (context) => const InfoPage()),
+                      ),
                     ),
-                  ),
-                ],
-              ),
-        body: Column(
-          children: [
-            Visibility(
-              visible: !fullscreen,
-              child: AppStatusBar(status: _deviceStatus),
-            ),
-            Expanded(child: _buildPage(_selectedIndex)),
-          ],
-        ),
-        bottomNavigationBar: fullscreen
-            ? null
-            : NavigationBar(
-                selectedIndex: _selectedIndex,
-                onDestinationSelected: (index) => setState(() => _selectedIndex = index),
-                destinations: const [
-                  NavigationDestination(icon: Icon(Icons.speed), label: 'Tacho'),
-                  NavigationDestination(icon: Icon(Icons.explore), label: 'Kompass'),
-                  NavigationDestination(icon: Icon(Icons.route), label: 'Track'),
-                  NavigationDestination(icon: Icon(Icons.settings), label: 'Einstellungen'),
-                ],
-              ),
-      ),
+                  ],
+                ),
+          // Keine Statuszeile mehr unter der AppBar (README Abschnitt 63):
+          // Die Satellitenzahl steht in der AppBar, das Stillstand-Symbol in
+          // der Tempo-Kachel der Start-Seite.
+          body: _buildPage(_selectedIndex),
+          // Fünf Einträge: AppNavigationBar trennt lange Beschriftungen
+          // ("Einstellungen") per Silbentrennung, statt sie abzuschneiden.
+          bottomNavigationBar: hideBars
+              ? null
+              : AppNavigationBar(
+                  selectedIndex: _selectedIndex,
+                  onSelected: (index) => setState(() => _selectedIndex = index),
+                  items: const [
+                    AppNavigationItem(icon: Icons.dashboard, label: 'Start'),
+                    AppNavigationItem(icon: Icons.speed, label: 'Tacho'),
+                    AppNavigationItem(icon: Icons.explore, label: 'Kompass'),
+                    AppNavigationItem(icon: Icons.route, label: 'Track'),
+                    AppNavigationItem(icon: Icons.settings, label: 'Einstellungen'),
+                  ],
+                ),
+        );
+      },
     );
   }
 
   Widget _buildPage(int index) {
     switch (index) {
       case 0:
+        return StartPage(
+          preferences: widget.preferences,
+          status: _deviceStatus,
+          pressureService: _pressureTrendService,
+          recordingService: _trackRecordingService,
+          // Kachel antippen -> zugehörige Vollansicht.
+          onOpenTab: (tab) => setState(() => _selectedIndex = tab),
+        );
+      case _tachoTabIndex:
         return SpeedPage(preferences: widget.preferences, status: _deviceStatus);
-      case 1:
+      case _compassTabIndex:
         return CompassPage(
           preferences: widget.preferences,
           pressureService: _pressureTrendService,
@@ -203,9 +259,9 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
         return TrackPage(
           recordingService: _trackRecordingService,
           preferences: widget.preferences,
-          fullscreen: _mapFullscreen,
+          fullscreen: _trackFullscreen,
         );
-      case 3:
+      case 4:
         return SettingsPage(preferences: widget.preferences);
       default:
         return const SizedBox.shrink();

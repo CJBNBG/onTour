@@ -2928,3 +2928,378 @@ Versatz auch in Release-Builds.
 `lib/services/app_preferences.dart`, `lib/services/track_recording_service.dart`,
 `lib/ui/compass_page.dart`, `lib/ui/settings_page.dart`,
 `native_android/.../OnTourApplication.kt`.
+
+## 56. Start-Seite mit Profilen (Wandern / Segeln / Rad-Moto / Wohnmobil / Eigene)
+
+**Idee:** Statt direkt auf dem Tacho zu starten, öffnet die App jetzt eine
+Start-/Übersichtsseite. Links steht eine vertikale Leiste mit den Profilen,
+rechts erscheinen die zum Profil passenden Anzeigen ("Slots") als Kacheln.
+Das gewählte Profil ist in der Leiste hervorgehoben und bleibt über
+App-Neustarts erhalten. Solange noch kein Profil gewählt wurde, fragt ein
+Hinweis "Wie bist du unterwegs?".
+
+**Navigation (geändert):** Fünf Tabs - Start, Tacho, Kompass, Track,
+Einstellungen. Start ist der erste Tab und der Start-Tab der App. Der
+Track-Tab hat dadurch jetzt Index 3 (`HomeShell._trackTabIndex`, wichtig für
+den Sprung aus der Pause-Erinnerung, Abschnitt 23). Wegen fünf Einträgen
+nutzt HomeShell jetzt `AppNavigationBar` (Silbentrennung statt abgeschnittener
+Beschriftung wie bei "Einstellungen").
+
+**Slot-Katalog (`models/user_profile.dart`, `SlotType`):** Tempo, Kurs über
+Grund, Höhe, Luftdruck, Position, Kompass, Kartenvorwahl. Ein Profil
+(`UserProfile`) ist nur eine Liste dieser Bausteine plus Anfangseinheit und
+Kartenvorwahl:
+
+| Profil | Einheit | Slots | Kartenvorwahl |
+|---|---|---|---|
+| Wandern | m/s | Tempo, Höhe, Luftdruck, Kompass, Position, Karte | Reit- und Wanderkarte + Wanderrouten |
+| Segeln | kn | Tempo, Kurs, Luftdruck, Position, Kompass, Karte | Standard + Seemarken |
+| Rad / Moto | km/h | Tempo, Höhe, Kurs, Kompass, Luftdruck, Karte | CyclOSM + Radrouten |
+| Wohnmobil | km/h | Tempo, Höhe, Luftdruck, Position, Kompass, Karte | TopPlusOpen |
+| Eigene | km/h | Tempo, Kurs, Höhe, Position, Kompass, Luftdruck | keine |
+
+**Einheit je Profil:** Beim Wählen eines Profils wird die zuletzt dafür
+verwendete (sonst die Standard-)Einheit eingestellt. Ändert der Nutzer die
+Einheit später (z. B. auf der Tacho-Seite), merkt sich das aktive Profil
+diese Wahl. Dadurch bleiben Start- und Tacho-Seite konsistent
+(`AppPreferences.setUserProfile`/`setSpeedUnit`).
+
+**Kartenvorwahl:** Die Kachel setzt Basiskarte, Routen-Overlay und
+Seemarken für die Track-Seite - aber nur auf Tipp auf "Übernehmen", nie
+automatisch beim Profilwechsel (`AppPreferences.applyMapPreset`). Ist die
+Vorwahl schon aktiv, zeigt die Kachel "Aktiv".
+
+**Sensoren (`services/live_data_service.dart`):** Die Seite abonniert nur,
+was die belegten Slots brauchen. Ein GPS-Stream liefert Tempo, Kurs, Höhe
+und Position (Tempo mit derselben Stillstandskorrektur wie der Tacho:
+Bewegungssensor UND GPS < 8 km/h). Der Barometer läuft nur bei belegtem
+Höhen-Slot (gleiche Kalibrierung und NN-Korrektur wie Kompass-Seite), der
+Kompass samt Gyro nur bei belegtem Kompass-Slot, der Luftdruck kommt aus
+dem ohnehin laufenden `PressureTrendService`. Beim Verlassen der Seite
+stoppt alles. Änderungen werden auf höchstens einen Neuaufbau je 200 ms
+gebündelt, die Kompassrose aktualisiert sich über einen eigenen
+`ValueNotifier`. Der Bildschirm bleibt wach, solange die Seite sichtbar ist
+(wie bei Tacho und Kompass).
+
+**Bedienung:** Eine Kachel antippen öffnet die Vollansicht (Tempo -> Tacho;
+Höhe, Luftdruck, Position, Kompass -> Kompass). Kurs und Kartenvorwahl
+haben keine Vollansicht.
+
+**Bewusst noch NICHT enthalten (nächste Ausbaustufe):**
+- Einstellungsbereich zum Anpassen der Slot-Belegung (und damit die freie
+  Belegung von "Eigene"). Die Speicherung ist schon vorbereitet
+  (`AppPreferences.slotsFor`/`setSlotsFor`/`resetSlotsFor`), es fehlt nur
+  die Oberfläche.
+- Schrittzähler: braucht die Berechtigung ACTIVITY_RECOGNITION (Android 10+)
+  samt Laufzeitabfrage, und der Sensor zählt nur seit dem Gerätestart. Bis
+  dahin belegt beim Wandern die Position den Platz.
+- Stellplatz-POIs für Wohnmobilisten.
+
+**Zu prüfen auf dem Gerät:** Kachelhöhe und Lesbarkeit der Position auf
+schmalen Displays (zwei Spalten neben der 80 dp breiten Leiste),
+Beschriftung der Leiste ("Wohnmobil"), Akkuverbrauch mit sechs belegten
+Slots.
+
+**Betroffene/neue Dateien:**
+- `lib/models/user_profile.dart` (NEU)
+- `lib/services/live_data_service.dart` (NEU)
+- `lib/ui/start_page.dart` (NEU)
+- `lib/services/app_preferences.dart` (Profil, Einheit je Profil, Slots,
+  Kartenvorwahl)
+- `lib/ui/home_shell.dart` (fünf Tabs, `AppNavigationBar`, Track-Index 3)
+
+## 57. Start-Seite: einstellbare Spalten und Einstellungsbereich "Start"
+
+**Spalten (`models/start_grid_columns.dart`, `StartGridColumns`):** Die
+Kacheln der Start-Seite stehen je nach Einstellung in einer oder zwei
+Spalten - Automatisch (Standard), 1 Spalte oder 2 Spalten. "Automatisch"
+wählt anhand der Breite des Kachelbereichs (neben der Profil-Leiste): unter
+480 dp eine Spalte (Smartphone), sonst zwei (Tablet, Faltgerät).
+
+**Einspaltig (Smartphone):** Textwerte (Tempo, Kurs, Höhe, Luftdruck,
+Position, Kartenvorwahl) sind flache Kacheln von 80-96 dp Höhe -
+Symbol und Beschriftung (mit Zusatzzeile, z. B. Genauigkeit) links, der Wert
+rechtsbündig. Die Kompassrose bekommt den übrigen Platz der Seite
+(mindestens 200, höchstens 380 dp) und erscheint dadurch größer als im
+Zwei-Spalten-Raster. Ist kein Kompass belegt, bleiben alle Kacheln flach, die
+Seite scrollt bei Bedarf. **Zweispaltig:** wie in Abschnitt 56 (höhere
+Kacheln, großer Wert in der Mitte).
+
+**Einstellungen -> Start (neuer Unterreiter, zweiter von vier):**
+- Spaltenanzahl (Auto / 1 Spalte / 2 Spalten).
+- Anzeigen je Profil: Profil per Chip wählen (zeigt zunächst das aktive
+  Profil), Anzeigen per Griff-Symbol umsortieren, per Minus-Symbol entfernen
+  (mindestens eine bleibt), per "Anzeige hinzufügen" aus den noch freien
+  ergänzen, per "Standard wiederherstellen" zurücksetzen. Jede Anzeige gibt
+  es höchstens einmal je Profil. Die Kartenvorwahl lässt sich nur bei
+  Profilen hinzufügen, die eine Karte vorwählen (nicht bei "Eigene"). Damit
+  ist auch "Eigene" frei belegbar. Änderungen werden sofort gespeichert und
+  wirken beim nächsten Öffnen der Start-Seite.
+
+**Noch offen:** Schrittzähler (ACTIVITY_RECOGNITION, siehe Abschnitt 56)
+und Stellplatz-POIs für Wohnmobilisten.
+
+**Zu prüfen auf dem Gerät:** Höhe der flachen Kacheln (80/88/96 dp, feste
+Näherungswerte) bei großer Systemschrift; Lesbarkeit der dreizeiligen
+Kartenvorwahl; Ziehen der Einträge im ReorderableListView innerhalb der
+scrollenden Einstellungsseite.
+
+**Betroffene/neue Dateien:**
+- `lib/models/start_grid_columns.dart` (NEU)
+- `lib/ui/start_page.dart` (flache Kacheln, ein-/zweispaltiges Layout)
+- `lib/ui/settings_page.dart` (Unterreiter "Start", vier statt drei Tabs)
+- `lib/services/app_preferences.dart` (`startGridColumns`, Slots ohne
+  Duplikate)
+
+## 58. Kompass-Seite: nur noch Rose und Kurs
+
+Höhe, Luftdruck (samt Trend) und Position stehen seit der Start-Seite
+(Abschnitt 56/57) dort und entfallen auf der Kompass-Seite. Übrig bleiben
+die Statuszeile (Genauigkeits-Badge, Chip "Kompass gestört", Buttons
+"Höhe kalibrieren" und "Kompass kalibrieren", Mess-Impuls), die
+Kompassrose und darunter die Kursangabe samt Genauigkeit ("Kurs: 87°").
+
+**Layout:** Die Rose nimmt den gesamten Platz zwischen Statuszeile und
+Kursangabe ein (quadratisch, mindestens 120, höchstens 600 dp, Seitenrand
+16 dp) - bisher begrenzten 80 % der Breite und 48 % der Höhe sie auf
+maximal 360 dp (Abschnitt 28). Die Kursangabe steht unter der Rose in einer
+FittedBox(scaleDown), damit sie bei großer Systemschrift in der Breite
+bleibt.
+
+**Dienste laufen unverändert weiter**, auch wenn ihre Werte hier nicht
+mehr angezeigt werden: GPS-Höhe und Barometer (für die Missweisung =
+Kurs auf geografisch Nord, Abschnitt 41, für die Höhenkalibrierung,
+Abschnitt 54, und für die Höhenmeldung an den Luftdruck-Trend, Abschnitt
+47). Der Dialog "Höhe kalibrieren" zeigt weiterhin die aktuell angezeigte
+Höhe, NN-Korrektur und manuellen Versatz.
+
+**Start-Seite (Korrektur zu Abschnitt 56):** Nur die Tempo-Kachel (-> Tacho)
+und die Kompass-Kachel (-> Kompass) öffnen eine Vollansicht. Höhe,
+Luftdruck und Position haben keine eigene Seite mehr und reagieren nicht
+auf Antippen.
+
+**Betroffene Dateien:** `lib/ui/compass_page.dart`, `lib/ui/start_page.dart`.
+
+## 59. Missweisung auf der Kompass-Seite
+
+Unter der Kursangabe steht jetzt die für den Standort ermittelte
+Missweisung (Deklination), z. B. "Missweisung: 3,4° O". Das ist genau der
+Wert, den `CompassService` auf den Magnetkurs addiert, damit "Kurs" auf
+geografisch Nord bezogen ist (Abschnitt 41): "O" = Ostmissweisung
+(magnetisch Nord liegt östlich von geografisch Nord, der Wert wird
+addiert), "W" = Westmissweisung. Solange noch kein Standort bekannt ist,
+steht dort "unbekannt (magnetischer Kurs)" - dann ist der angezeigte Kurs
+noch nicht korrigiert.
+
+Der Wert stammt aus Androids `GeomagneticField` (offline, Weltmagnetmodell)
+für Standort, Höhe und aktuelles Datum und wird bei einer Ortsänderung von
+mehr als ca. 0,25° neu bestimmt. Er ist ein Modellwert: Er gibt die
+großräumige Abweichung an (Genauigkeit typischerweise etwa ein halbes Grad),
+nicht örtliche Störungen durch Metall oder Gestein.
+
+**Betroffene Dateien:** `lib/services/compass_service.dart` (Getter
+`declinationDegrees`), `lib/ui/compass_page.dart` (Anzeige, Neuzeichnen nach
+der Ermittlung).
+
+## 60. Seemarken als gleichberechtigtes Overlay ("Einblenden")
+
+**Änderung:** Das Seemarken-Overlay (OpenSeaMap) ist kein eigener Schalter
+mehr, sondern die vierte Alternative in der Overlay-Auswahl - neben Aus,
+Wanderrouten und Radrouten. Die Auswahl heißt jetzt "Einblenden" statt
+"Routen einblenden" (Karten-Button auf Track-Seite/Detailansicht und
+Einstellungen -> Karten), und der Eintrag "Aus" beschreibt sich allgemein
+("Nichts zusätzlich über der Karte einblenden."). Die Seemarken haben jetzt
+auch eine eigene Quellenkarte in den Einstellungen und einen eigenen
+Abschnitt in der Legende (wie die Routen-Overlays).
+
+**Folge:** Die vier Alternativen schließen sich gegenseitig aus. Seemarken
+und Wander-/Radrouten lassen sich nicht mehr gleichzeitig einblenden.
+
+**Umsetzung:** `RouteOverlay` (`models/route_overlay.dart`) hat den neuen
+Wert `seamarks` (Kachel-URL `tiles.openseamap.org/seamark/...`, höchste
+native Zoomstufe 18, Quellenangabe "Seemarken: © OpenSeaMap-Mitwirkende").
+Der Typname blieb aus Kompatibilitätsgründen "RouteOverlay"; fachlich ist es
+das Overlay der Karte. `buildMapTileLayers` zeichnet Seemarken jetzt über
+dieselbe Ebene wie die Routen (die eigene Seemarken-Ebene entfiel); der
+Parameter `nauticalMode` ist ohne Wirkung und nur noch für ältere Aufrufer
+(TrackPage, TrackDetailPage) vorhanden. `AppPreferences.mapNauticalMode`
+ist nur noch eine abgeleitete Sicht (`routeOverlay == seamarks`),
+`setMapNauticalMode` entfiel. Die Kartenvorwahl des Profils "Segeln" setzt
+jetzt `RouteOverlay.seamarks` statt eines eigenen Seemarken-Wertes
+(`UserProfile.nauticalOverlay` entfiel).
+
+**Übernahme alter Einstellungen:** War der frühere Seemarken-Schalter
+eingeschaltet und ist sonst kein Overlay gewählt, bleiben die Seemarken
+sichtbar. War zusätzlich ein Routen-Overlay gewählt, bleibt dieses
+erhalten. Der alte Schlüssel wird danach entfernt.
+
+**Zu prüfen auf dem Gerät:** Seemarken-Kacheln und Quellenangabe unter der
+Karte (Zoomstufen über 18 werden vergrößert statt leer dargestellt), die
+Legende bei gewähltem Overlay "Seemarken".
+
+**Betroffene Dateien:** `lib/models/route_overlay.dart`,
+`lib/models/user_profile.dart`, `lib/services/app_preferences.dart`,
+`lib/ui/settings_page.dart`, `lib/ui/widgets/map_tile_layers.dart`,
+`lib/ui/widgets/map_style_button.dart`, `lib/ui/widgets/map_legend_button.dart`.
+
+## 61. Start-Seite: Stillstand-Symbol im Tempo-Slot, Höhenkalibrierung im Höhen-Slot, Profil in der AppBar
+
+**Statuszeile:** Auf der Start-Seite gibt es keine Statuszeile (Satellitenzahl,
+Pause-Symbol) mehr; sie bleibt nur auf Tacho- und Kompass-Seite
+(`HomeShell._tabsWithStatusBar`). Das Stillstand-/Bewegungs-Symbol sitzt
+dafür in der Kopfzeile der **Tempo-Kachel**: orangefarbene Pause =
+Stillstand erkannt, grünes Abspielen = in Bewegung, graues Symbol =
+unbekannt. Die Regel ist dieselbe wie auf der Tacho-Seite (Bewegungssensor
+UND GPS-Rohwert unter 8 km/h, `LiveDataService.stationary`). Die Satellitenzahl
+wird auf der Start-Seite nicht mehr angezeigt.
+
+**Höhenkalibrierung:** Der Button "Höhe kalibrieren" in der Statuszeile der
+Kompass-Seite entfällt (dort wird keine Höhe mehr angezeigt, Abschnitt 58).
+Stattdessen öffnet ein Antippen der **Höhen-Kachel** auf der Start-Seite den
+Kalibrierdialog (Abschnitt 54); ein kleines Regler-Symbol in der Kopfzeile
+der Kachel weist darauf hin. Inhalt und Wirkung des Dialogs sind unverändert
+(bekannte Höhe eingeben, Versatz zur angezeigten Höhe wird gespeichert,
+Zurücksetzen auch unter Einstellungen -> Erweitert). **Voraussetzung:** Die
+Höhen-Kachel muss im gewählten Profil belegt sein (Einstellungen -> Start) -
+im Standardprofil "Segeln" ist sie nicht belegt. Die Höhe, die die Start-Seite
+anzeigt, wird jetzt auch an den Luftdruck-Trend gemeldet (Erkennung von
+Höhenänderungen, Abschnitt 47), wie bisher von der Kompass-Seite.
+
+**AppBar:** Neben dem Seitennamen steht, mit Gedankenstrich getrennt, das
+gewählte Profil (Kurzname), z. B. "Tacho – Segeln" oder "Start – Rad / Moto".
+Ohne gewähltes Profil steht nur der Seitenname. Der Titel bleibt einzeilig
+und wird bei Platzmangel verkleinert (FittedBox) statt umzubrechen.
+
+**Betroffene Dateien:** `lib/ui/start_page.dart`, `lib/services/live_data_service.dart`,
+`lib/ui/compass_page.dart`, `lib/ui/home_shell.dart`, `lib/ui/settings_page.dart`
+(Hinweistext zur Höhenkalibrierung).
+
+## 62. Satelliten in der AppBar, neue Standardbelegung, "Reisen", Reiter-Reihenfolge, Berechtigungen
+
+**Satellitenanzahl:** Immer sichtbar in der AppBar, links neben dem
+Info-Button (`widgets/satellite_indicator.dart`, Farben wie bisher: grau =
+keine aktuellen Daten, rot = 0, orange = 1-3, grün = ab 4). Die Statuszeile
+unter der AppBar (nur Tacho und Kompass) zeigt dadurch nur noch das
+Stillstand-/Bewegungs-Symbol (`AppStatusBar`), die Satellitenzahl dort
+entfällt, um Doppelungen zu vermeiden. Im Karten-Vollbild der Track-Seite
+(AppBar ausgeblendet, Abschnitt 58 ff.) ist auch die Satellitenzahl nicht
+sichtbar.
+
+**Standardbelegung der Slots** (`models/user_profile.dart`; gilt für alle,
+die für ein Profil noch keine eigene Belegung gespeichert haben - eine schon
+angepasste Belegung bleibt erhalten, "Standard wiederherstellen" in
+Einstellungen -> Start übernimmt die neue):
+
+| Profil | Slots (in dieser Reihenfolge) |
+|---|---|
+| Wandern | Kompass, Höhe, Luftdruck, Position, Kartenvorwahl |
+| Segeln | Kompass, Kurs, Tempo, Position, Luftdruck, Kartenvorwahl |
+| Rad / Moto | Tempo, Höhe, Kompass, Kurs, Luftdruck, Kartenvorwahl |
+| Reisen | Tempo, Höhe, Kompass, Position, Luftdruck, Kartenvorwahl |
+| Eigene | Tempo, Kurs, Höhe, Position, Luftdruck, Kartenvorwahl |
+
+Die Kartenvorwahl des Profils "Eigene" ist die Standardkarte ohne Overlay
+(früher hatte "Eigene" keine Kartenvorwahl).
+
+**"Wohnmobil" heißt jetzt "Reisen"** (Name und Kurzname in Profil-Leiste,
+AppBar-Titel und Einstellungen). Der interne Bezeichner `UserProfile.camper`
+bleibt unverändert, damit die gespeicherte Profilwahl gültig bleibt.
+
+**Einstellungen:** Der Reiter "Start" ist jetzt der erste (und damit der
+beim Öffnen sichtbare), danach Anzeige, Karten, Erweitert.
+
+**Info-Seite:** Neuer Abschnitt "Berechtigungen" mit allen im Manifest
+angeforderten Berechtigungen (Standort, Vordergrunddienst für Standort,
+Benachrichtigungen, WAKE_LOCK, Internet) samt Begründung sowie dem Hinweis,
+welche Funktionen keine Berechtigung brauchen (Sensoren, GPX-Import und
+-Export) und dass kein Standortzugriff im Hintergrund angefordert wird. Die
+Liste steht als Konstante `_permissions` in `info_page.dart` und muss bei
+Änderungen an der `AndroidManifest.xml` mitgepflegt werden.
+
+**Betroffene/neue Dateien:** `lib/ui/widgets/satellite_indicator.dart` (NEU),
+`lib/ui/widgets/app_status_bar.dart`, `lib/ui/home_shell.dart`,
+`lib/models/user_profile.dart`, `lib/ui/settings_page.dart`,
+`lib/ui/info_page.dart`.
+
+## 63. Statuszeile entfällt
+
+Die Statuszeile unter der AppBar (`widgets/app_status_bar.dart`, bisher auf
+Tacho- und Kompass-Seite mit dem Stillstand-/Bewegungs-Symbol) entfällt
+ganz; ihr Platz gehört jetzt den Seiten. HomeShell setzt `_buildPage(...)`
+direkt als `body` des Scaffolds. Die Satellitenzahl steht immer sichtbar in
+der AppBar (Abschnitt 62), das Stillstand-Symbol in der Tempo-Kachel der
+Start-Seite (Abschnitt 61). Tacho- und Kompass-Seite zeigen es nicht mehr.
+`widgets/app_status_bar.dart` wird nicht mehr verwendet und kann gelöscht
+werden (`DeviceStatusService.displayStationary` und
+`reportSpeedPageStationary` bleiben bestehen, werden aber nur noch intern
+genutzt).
+
+**Betroffene Dateien:** `lib/ui/home_shell.dart`.
+
+## 64. Aufzeichnungs-Indikator auf der Start-Seite
+
+Unten in der Profil-Leiste der Start-Seite (links unten) zeigt
+`widgets/recording_indicator.dart` den Zustand einer Track-Aufzeichnung:
+- **Aufzeichnung läuft:** sanft blinkender roter Punkt, darunter "Aufnahme".
+- **Pausiert** (manuell oder automatisch bei Stillstand): oranges
+  Pause-Symbol, darunter "Pausiert".
+- **Keine Aufzeichnung:** nichts, das Widget belegt dann keinen Platz.
+
+Antippen öffnet die Track-Seite. Das Widget hört direkt auf
+`TrackRecordingService.updates`, baut sich aber nur bei einem
+Zustandswechsel neu auf (nicht bei jedem neuen Punkt); die Blink-Animation
+läuft nur während aktiver Aufzeichnung. `StartPage` bekommt dafür den von
+HomeShell gehaltenen `TrackRecordingService` als neuen Parameter
+`recordingService`. Die Leiste ist dazu in eine Spalte aus Profil-Buttons
+(scrollbar wie bisher) und dem Indikator darunter umgebaut, 80 dp breit.
+
+**Zu prüfen auf dem Gerät:** Lesbarkeit des Blinkens im Freien; Verhalten der
+Leiste auf sehr niedrigen Displays (Buttons scrollen, der Indikator bleibt
+unten stehen).
+
+**Betroffene/neue Dateien:** `lib/ui/widgets/recording_indicator.dart` (NEU),
+`lib/ui/start_page.dart`, `lib/ui/home_shell.dart`.
+
+## 65. Aufzeichnungs-Indikator mit Warnung bei Unterbrechung
+
+Der rote Punkt (Abschnitt 64) erscheint nur noch, wenn die Aufzeichnung
+tatsächlich arbeitet. Besteht der Zustand "aufzeichnend", der Dienst liefert
+aber nicht mehr, zeigt der Indikator stattdessen ein schneller blinkendes
+**rotes Warn-Dreieck mit "Unterbrochen"** (Tooltip nennt den Grund).
+
+**Prüfung (`TrackRecordingService.interruptionReason`):** null = in Ordnung.
+Eine Unterbrechung wird gemeldet, wenn
+- der Positions-Stream ausgefallen ist und Neustart-Versuche laufen
+  (`_consecutiveStreamFailures > 0`, Abschnitt 30.4; bleibt bis zum ersten
+  erfolgreich empfangenen Punkt bestehen),
+- der Stream nicht aktiv ist (nach einer Schonfrist von 5 s nach
+  Start/Fortsetzen),
+- oder bei AKTIVER Aufzeichnung länger als 30 s keine Position eintrifft
+  (auch vor dem ersten GPS-Fix, z. B. im Gebäude). Bei Stillstand pausiert die
+  automatische Pause nach ca. 13 s, 30 s sind also deutlich mehr als ein
+  normaler Halt.
+
+Bei einer MANUELLEN Pause wird nichts geprüft (es wird kein Stream
+gebraucht), bei einer AUTOMATISCHEN Pause nur, ob der Stream noch läuft (im
+Stand kommen wegen des distanceFilters keine Punkte). Der Service prüft im
+Sekundentakt (der vorhandene Timer der Stillstandserkennung), meldet
+Änderungen über `updates` und schreibt sie ins Diagnose-Protokoll
+("WARNUNG: ..." bzw. "Aufzeichnung wieder in Ordnung", nur Debug-Builds).
+Das Widget hört auf `updates` und prüft zusätzlich alle 2 s selbst, weil
+eine Unterbrechung durch AUSBLEIBENDE Daten entsteht.
+
+**Grenzen:** Geprüft wird, ob Positionen im Dart-Code ankommen - ob der
+native Foreground-Service samt Benachrichtigung läuft, lässt sich von Dart
+aus nicht abfragen. Fällt eine automatische Pause durch GPS-Verlust (Tunnel)
+zusammen mit einer Pause, zeigt der Indikator weiterhin "Pausiert", solange
+der Stream selbst läuft. Stirbt der gesamte App-Prozess, kann der Indikator
+naturgemäß nichts anzeigen - dafür gibt es die Wiederherstellung über den
+Checkpoint (Abschnitt 30.4).
+
+**Zu prüfen auf dem Gerät:** Warnung z. B. durch Ausschalten des
+Standortdienstes während der Aufzeichnung (Stream-Fehler) und durch Start im
+Gebäude ohne Fix.
+
+**Betroffene Dateien:** `lib/services/track_recording_service.dart`
+(`interruptionReason`, Prüfung im Sekundentakt),
+`lib/ui/widgets/recording_indicator.dart`.

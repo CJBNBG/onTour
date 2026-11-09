@@ -6,9 +6,10 @@ import '../../models/route_overlay.dart';
 import '../../services/app_preferences.dart';
 
 /// Runder Kartenüberlagerungs-Button zur Wahl der Basiskarte (Standard,
-/// OpenTopoMap-R, Reit- und Wanderkarte) sowie zum Ein-/Ausschalten des
-/// Seemarken-Overlays (OpenSeaMap) - ersetzt den früheren reinen
-/// Landkarte/Seekarte-Umschalter (siehe README Abschnitt 51). Die Wahl
+/// OpenTopoMap-R, Reit- und Wanderkarte, ...) sowie des Overlays, das
+/// darüber eingeblendet wird (Aus, Wanderrouten, Radrouten, Seemarken) -
+/// ersetzt den früheren reinen Landkarte/Seekarte-Umschalter (siehe README
+/// Abschnitt 51/60). Die Wahl
 /// wird über [AppPreferences] gespeichert und gilt für beide
 /// Kartenansichten gemeinsam.
 class MapStyleButton extends StatelessWidget {
@@ -70,7 +71,7 @@ class MapStyleButton extends StatelessWidget {
                   ),
                 ),
                 const Divider(),
-                AutoHyphenatingText('Routen einblenden', style: Theme.of(context).textTheme.titleMedium),
+                AutoHyphenatingText('Einblenden', style: Theme.of(context).textTheme.titleMedium),
                 const SizedBox(height: 4),
                 RadioGroup<RouteOverlay>(
                   groupValue: preferences.routeOverlay,
@@ -88,17 +89,6 @@ class MapStyleButton extends StatelessWidget {
                         ),
                     ],
                   ),
-                ),
-                const Divider(),
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: AutoHyphenatingText('Seemarken einblenden'),
-                  subtitle: AutoHyphenatingText(
-                    'Bojen, Leuchttürme und Fahrwassermarkierungen (OpenSeaMap) '
-                    'über der gewählten Karte.',
-                  ),
-                  value: preferences.mapNauticalMode,
-                  onChanged: preferences.setMapNauticalMode,
                 ),
               ],
             ),
