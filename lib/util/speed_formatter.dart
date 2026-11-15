@@ -29,11 +29,9 @@ class SpeedFormatter {
   /// unabhängig vom Geschwindigkeitswert, da es sich um eine deutlich
   /// kleiner dargestellte Zusatzangabe handelt).
   static String formatAccuracy(double? accuracyDisplayValue, SpeedUnit unit) {
-    if (accuracyDisplayValue == null ||
-        accuracyDisplayValue.isNaN ||
-        accuracyDisplayValue < 0) {
+    if (accuracyDisplayValue == null || accuracyDisplayValue.isNaN || accuracyDisplayValue < 0) {
       return 'Genauigkeit: unbekannt';
     }
-    return 'Genauigkeit: ± ${_oneDecimal.format(accuracyDisplayValue)} ${unit.symbol}';
+    return 'Genauigkeit: ±${_oneDecimal.format(accuracyDisplayValue)} ${unit.symbol}';
   }
 }

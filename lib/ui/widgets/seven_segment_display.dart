@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// Stellt eine Zeichenkette (Ziffern sowie Komma als Dezimaltrennzeichen)
 /// als klassische rote Sieben-Segment-Anzeige dar - vollständig als Vektor-
@@ -31,9 +31,7 @@ class SevenSegmentDisplay extends StatelessWidget {
   double get _totalWidth {
     var width = 0.0;
     for (final char in text.split('')) {
-      width += (char == ',' || char == '.')
-          ? height * _commaWidthRatio
-          : height * _digitWidthRatio;
+      width += (char == ',' || char == '.') ? height * _commaWidthRatio : height * _digitWidthRatio;
     }
     return width;
   }
@@ -185,6 +183,5 @@ class _SevenSegmentPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _SevenSegmentPainter oldDelegate) =>
-      oldDelegate.text != text || oldDelegate.color != color;
+  bool shouldRepaint(covariant _SevenSegmentPainter oldDelegate) => oldDelegate.text != text || oldDelegate.color != color;
 }

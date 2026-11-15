@@ -1,6 +1,6 @@
 import 'dart:math' as math;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// Analoges Rundinstrument für die Geschwindigkeit: 270°-Skala (von
 /// unten links über oben nach unten rechts), Zeiger mit weicher
@@ -122,8 +122,7 @@ class _GaugePainter extends CustomPainter {
 
   double _angleFor(double v) => _startAngle + _sweepAngle * (v / maxValue);
 
-  Offset _point(Offset center, double radius, double angle) =>
-      center + Offset(math.cos(angle), math.sin(angle)) * radius;
+  Offset _point(Offset center, double radius, double angle) => center + Offset(math.cos(angle), math.sin(angle)) * radius;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -144,7 +143,7 @@ class _GaugePainter extends CustomPainter {
       radius,
       Paint()
         ..style = PaintingStyle.stroke
-        ..strokeWidth = radius * 0.03
+        ..strokeWidth = radius * 0.001
         ..color = accentColor,
     );
 
@@ -241,9 +240,5 @@ class _GaugePainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _GaugePainter old) =>
-      old.value != value ||
-      old.maxValue != maxValue ||
-      old.faceColor != faceColor ||
-      old.accentColor != accentColor;
+  bool shouldRepaint(covariant _GaugePainter old) => old.value != value || old.maxValue != maxValue || old.faceColor != faceColor || old.accentColor != accentColor;
 }

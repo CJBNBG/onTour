@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:auto_hyphenating_text/auto_hyphenating_text.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
 import '../models/speed_display_style.dart';
@@ -109,9 +109,7 @@ class _SpeedPageState extends State<SpeedPage> {
 
     if (availability != LocationAvailability.ready) return;
 
-    _speedSubscription = _speedService
-        .speedStream(widget.preferences.speedAccuracyMode)
-        .listen(
+    _speedSubscription = _speedService.speedStream(widget.preferences.speedAccuracyMode).listen(
       (reading) {
         if (!mounted) return;
         setState(() {
@@ -248,11 +246,9 @@ class _SpeedPageState extends State<SpeedPage> {
     // Geräte typische GPS-Rauschen, ohne eine tatsächliche (schnelle)
     // Fahrt jemals fälschlich auf 0 zu setzen.
     final stationaryOverrideActive = reading != null && _isStationaryOverride(reading);
-    final effectiveSpeedMs =
-        stationaryOverrideActive ? 0.0 : reading?.speedMetersPerSecond;
+    final effectiveSpeedMs = stationaryOverrideActive ? 0.0 : reading?.speedMetersPerSecond;
 
-    final displayValue =
-        effectiveSpeedMs != null ? unit.fromMetersPerSecond(effectiveSpeedMs) : 0.0;
+    final displayValue = effectiveSpeedMs != null ? unit.fromMetersPerSecond(effectiveSpeedMs) : 0.0;
     final speedText = effectiveSpeedMs != null
         ? SpeedFormatter.format(
             speedMetersPerSecond: effectiveSpeedMs,
@@ -273,9 +269,7 @@ class _SpeedPageState extends State<SpeedPage> {
       decimalDigit = speedText.substring(commaIndex + 1);
     }
 
-    final accuracyDisplayValue = reading?.speedAccuracyMetersPerSecond != null
-        ? unit.fromMetersPerSecond(reading!.speedAccuracyMetersPerSecond!)
-        : null;
+    final accuracyDisplayValue = reading?.speedAccuracyMetersPerSecond != null ? unit.fromMetersPerSecond(reading!.speedAccuracyMetersPerSecond!) : null;
 
     final analog = widget.preferences.speedDisplayStyle == SpeedDisplayStyle.analog;
 
@@ -404,8 +398,7 @@ class _SpeedPageState extends State<SpeedPage> {
           width: double.infinity,
           child: SegmentedButton<int>(
             segments: [
-              for (final value in SpeedScale.optionsFor(unit))
-                ButtonSegment(value: value, label: Text('$value')),
+              for (final value in SpeedScale.optionsFor(unit)) ButtonSegment(value: value, label: Text('$value')),
             ],
             selected: {widget.preferences.speedScaleMax(unit)},
             onSelectionChanged: (selection) {

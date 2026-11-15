@@ -1,7 +1,7 @@
 name: ontour
 description: Kompass-, Tacho- und Karten-App für Android
 publish_to: 'none'
-version: 1.0.0+27
+version: 1.0.0+30
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
@@ -68,6 +68,8 @@ dependencies:
   # NEU (siehe README Abschnitt 45): Oeffnet die Play-Store-Entwicklerseite
   # (Liste aller Apps des Autors) vom Info-Bildschirm aus.
   url_launcher: ^6.3.3
+  material_ui: ^1.11.0
+  cupertino_ui: ^1.1.6
 
 dev_dependencies:
   flutter_test:

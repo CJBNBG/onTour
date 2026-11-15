@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:auto_hyphenating_text/auto_hyphenating_text.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:intl/intl.dart';
 import 'package:sensors_plus/sensors_plus.dart';
 
@@ -36,8 +36,7 @@ class CompassCalibrationPage extends StatefulWidget {
   State<CompassCalibrationPage> createState() => _CompassCalibrationPageState();
 }
 
-class _CompassCalibrationPageState extends State<CompassCalibrationPage>
-    with SingleTickerProviderStateMixin {
+class _CompassCalibrationPageState extends State<CompassCalibrationPage> with SingleTickerProviderStateMixin {
   /// Einteilung der Richtungen des Magnetfeldvektors im GERÄTEKOORDINATEN-
   /// system in Kacheln (Azimut x Elevation) - je mehr verschiedene Kacheln
   /// beim Drehen durchlaufen werden, desto vollständiger wurde das Gerät
@@ -96,12 +95,8 @@ class _CompassCalibrationPageState extends State<CompassCalibrationPage>
     if (norm < 1e-3) return;
     final azimuth = math.atan2(e.y, e.x); // -pi .. pi
     final elevation = math.asin((e.z / norm).clamp(-1.0, 1.0)); // -pi/2 .. pi/2
-    final a = (((azimuth + math.pi) / (2 * math.pi)) * _azimuthBins)
-        .floor()
-        .clamp(0, _azimuthBins - 1);
-    final b = (((elevation + math.pi / 2) / math.pi) * _elevationBins)
-        .floor()
-        .clamp(0, _elevationBins - 1);
+    final a = (((azimuth + math.pi) / (2 * math.pi)) * _azimuthBins).floor().clamp(0, _azimuthBins - 1);
+    final b = (((elevation + math.pi / 2) / math.pi) * _elevationBins).floor().clamp(0, _elevationBins - 1);
     if (_visitedBins.add(a * _elevationBins + b)) {
       if (!mounted) return;
       setState(_updateCompletion);
@@ -181,9 +176,7 @@ class _CompassCalibrationPageState extends State<CompassCalibrationPage>
             ),
             const SizedBox(height: 24),
             AutoHyphenatingText(
-              strength != null
-                  ? 'Magnetfeld: ${_fieldFormat.format(strength)} µT'
-                  : 'Magnetfeld: nicht verfügbar',
+              strength != null ? 'Magnetfeld: ${_fieldFormat.format(strength)} µT' : 'Magnetfeld: nicht verfügbar',
               style: theme.textTheme.headlineSmall,
             ),
             const SizedBox(height: 4),
@@ -351,8 +344,5 @@ class _FigureEightPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _FigureEightPainter oldDelegate) =>
-      oldDelegate.progress != progress ||
-      oldDelegate.pathColor != pathColor ||
-      oldDelegate.dotColor != dotColor;
+  bool shouldRepaint(covariant _FigureEightPainter oldDelegate) => oldDelegate.progress != progress || oldDelegate.pathColor != pathColor || oldDelegate.dotColor != dotColor;
 }

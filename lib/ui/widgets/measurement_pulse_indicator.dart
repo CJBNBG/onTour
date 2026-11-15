@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// Blitzt kurz auf, sobald sich [pulseKey] ändert - als optische
 /// Rückmeldung, dass gerade eine neue Messung eingetroffen ist (siehe
@@ -30,8 +30,7 @@ class MeasurementPulseIndicator extends StatefulWidget {
   State<MeasurementPulseIndicator> createState() => _MeasurementPulseIndicatorState();
 }
 
-class _MeasurementPulseIndicatorState extends State<MeasurementPulseIndicator>
-    with SingleTickerProviderStateMixin {
+class _MeasurementPulseIndicatorState extends State<MeasurementPulseIndicator> with SingleTickerProviderStateMixin {
   late final AnimationController _controller = AnimationController(
     vsync: this,
     duration: const Duration(milliseconds: 700),

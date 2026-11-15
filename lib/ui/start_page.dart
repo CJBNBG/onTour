@@ -1,7 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:auto_hyphenating_text/auto_hyphenating_text.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:intl/intl.dart' show NumberFormat;
 import 'package:wakelock_plus/wakelock_plus.dart';
 
@@ -169,8 +169,7 @@ class _StartPageState extends State<StartPage> {
           child: IntrinsicHeight(
             child: NavigationRail(
               selectedIndex: selected?.index,
-              onDestinationSelected: (index) =>
-                  widget.preferences.setUserProfile(UserProfile.values[index]),
+              onDestinationSelected: (index) => widget.preferences.setUserProfile(UserProfile.values[index]),
               labelType: NavigationRailLabelType.all,
               destinations: [
                 for (final profile in UserProfile.values)
@@ -259,9 +258,7 @@ class _StartPageState extends State<StartPage> {
           StartGridColumns.two => false,
           StartGridColumns.auto => constraints.maxWidth < StartGridColumns.autoTwoColumnMinWidth,
         };
-        return oneColumn
-            ? _buildSingleColumn(context, profile, slots, constraints)
-            : _buildTwoColumns(context, profile, slots, constraints);
+        return oneColumn ? _buildSingleColumn(context, profile, slots, constraints) : _buildTwoColumns(context, profile, slots, constraints);
       },
     );
   }
@@ -612,9 +609,7 @@ class _StartPageState extends State<StartPage> {
       messenger.showSnackBar(
         SnackBar(
           content: Text(
-            _live.altitudePending
-                ? 'Die Höhe wird noch ermittelt - bitte kurz warten.'
-                : 'Noch keine Höhe verfügbar.',
+            _live.altitudePending ? 'Die Höhe wird noch ermittelt - bitte kurz warten.' : 'Noch keine Höhe verfügbar.',
           ),
         ),
       );
@@ -643,9 +638,7 @@ class _StartPageState extends State<StartPage> {
             Text(
               correction.hasMslCorrection
                   ? 'NN-Korrektur (Android): ${_signed(correction.mslCorrectionMeters)} m'
-                  : (correction.mslSupported
-                      ? 'NN-Korrektur (Android): noch nicht ermittelt'
-                      : 'NN-Korrektur (Android): erst ab Android 14'),
+                  : (correction.mslSupported ? 'NN-Korrektur (Android): noch nicht ermittelt' : 'NN-Korrektur (Android): erst ab Android 14'),
             ),
             Text('Manueller Versatz: ${_signed(currentOffset)} m'),
             const SizedBox(height: 12),
@@ -808,9 +801,7 @@ class _StartPageState extends State<StartPage> {
       compact: compact,
       value: _oneDecimal.format(reading.hPa),
       unit: 'hPa',
-      subtitle: category == null
-          ? 'Trend: sammle Daten …'
-          : '${category.arrow} ${category.label}',
+      subtitle: category == null ? 'Trend: sammle Daten …' : '${category.arrow} ${category.label}',
     );
   }
 
@@ -842,10 +833,8 @@ class _StartPageState extends State<StartPage> {
         line.contains(': ') ? line.substring(line.indexOf(': ') + 2) : line,
     ];
     final accuracy = _live.positionAccuracyMeters;
-    final accuracyText =
-        accuracy == null ? 'Genauigkeit unbekannt' : 'Genauigkeit ± ${_noDecimal.format(accuracy)} m';
-    final lineStyle = (compact ? theme.textTheme.titleMedium : theme.textTheme.titleLarge)
-        ?.copyWith(fontWeight: FontWeight.bold);
+    final accuracyText = accuracy == null ? 'Genauigkeit unbekannt' : 'Genauigkeit ± ${_noDecimal.format(accuracy)} m';
+    final lineStyle = (compact ? theme.textTheme.titleMedium : theme.textTheme.titleLarge)?.copyWith(fontWeight: FontWeight.bold);
     final linesColumn = Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: compact ? CrossAxisAlignment.end : CrossAxisAlignment.center,
@@ -914,9 +903,7 @@ class _StartPageState extends State<StartPage> {
           ValueListenableBuilder<double?>(
             valueListenable: _live.compassHeading,
             builder: (context, heading, _) => Text(
-              _live.compassDisturbed
-                  ? 'Kompass gestört'
-                  : (heading == null ? '-' : '${_noDecimal.format(heading)}°'),
+              _live.compassDisturbed ? 'Kompass gestört' : (heading == null ? '-' : '${_noDecimal.format(heading)}°'),
               style: theme.textTheme.bodySmall?.copyWith(
                 color: _live.compassDisturbed ? theme.colorScheme.error : null,
               ),

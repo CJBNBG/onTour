@@ -1,6 +1,6 @@
 import 'dart:math' as math;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// Zeichnet eine dekorative Kompassrose, die sich passend zur aktuellen
 /// Peilung [headingDegrees] dreht: Die Skala (samt Sternmuster und
@@ -115,7 +115,7 @@ class _CompassPainter extends CustomPainter {
   void _drawBezel(Canvas canvas, Offset center, double radius) {
     final outerRing = Paint()
       ..style = PaintingStyle.stroke
-      ..strokeWidth = radius * 0.045
+      ..strokeWidth = radius * 0.01
       ..shader = SweepGradient(
         colors: [
           primaryColor,
@@ -145,10 +145,8 @@ class _CompassPainter extends CustomPainter {
       final prevAngle = (i - 0.5) * (360 / points) * math.pi / 180;
 
       final tip = Offset(radius * 0.82 * math.sin(angle), -radius * 0.82 * math.cos(angle));
-      final left = Offset(
-          radius * 0.22 * math.sin(prevAngle), -radius * 0.22 * math.cos(prevAngle));
-      final right = Offset(
-          radius * 0.22 * math.sin(nextAngle), -radius * 0.22 * math.cos(nextAngle));
+      final left = Offset(radius * 0.22 * math.sin(prevAngle), -radius * 0.22 * math.cos(prevAngle));
+      final right = Offset(radius * 0.22 * math.sin(nextAngle), -radius * 0.22 * math.cos(nextAngle));
 
       final path = Path()
         ..moveTo(0, 0)
@@ -269,6 +267,5 @@ class _CompassPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _CompassPainter oldDelegate) =>
-      oldDelegate.headingDegrees != headingDegrees;
+  bool shouldRepaint(covariant _CompassPainter oldDelegate) => oldDelegate.headingDegrees != headingDegrees;
 }

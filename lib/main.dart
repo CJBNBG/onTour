@@ -1,5 +1,5 @@
 import 'package:auto_hyphenating_text/auto_hyphenating_text.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/date_symbol_data_local.dart';
 

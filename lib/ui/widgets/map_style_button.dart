@@ -1,5 +1,5 @@
 import 'package:auto_hyphenating_text/auto_hyphenating_text.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../../models/map_style.dart';
 import '../../models/route_overlay.dart';

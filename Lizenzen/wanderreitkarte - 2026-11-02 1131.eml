@@ -1,0 +1,217 @@
+Return-Path: <nop@wanderreitkarte.de>
+X-Spam-Checker-Version: SpamAssassin 4.0.0 (2022-12-13) on
+	dd40612.kasserver.com
+X-Original-To: onTour@clausjbauer.de
+Delivered-To: m0819bcf@dd40612.kasserver.com
+Authentication-Results: dd40612.kasserver.com;
+	dkim=pass (2048-bit key; unprotected) header.d=wanderreitkarte.de header.i=@wanderreitkarte.de header.a=rsa-sha256 header.s=2024 header.b=Lbtsrbad;
+	dkim-atps=neutral
+X-KAS-Sym: v3:f51bdf72230551df:oj/XSdr+TwxsXOkmIxbgygSCspE0OKPsevpPl5vdaNodh
+	xDXJ81bRiD3qsy/Yc0Xo5s43KVaCljbe9C3MXyRr1ttfBLYg2BX1hp9FO9eim82v5RNcd4r7y7/
+	VgojieTmwdjnwXbRYvKxuldybHwPPhv4F3dujlO6b1O6hHGT8Dr/pSNbmH9y19mqTwDvkCPOY9u
+	1ghXBKsUZqwTzYtZLTSMSCEaqnOven3BUXzkIarJK8ua/t+NIa6LH6xrhx+x3CUFWjayBwi0vnV
+	wVmmshAKt2ojFEigXZaOjaqjI3Ib+8ox1UOYT7zOsA0bP4KeYaKhcoh13fcWtoSuZ6JLcX/Q==:
+	PVqnK3rlzgpBBxb29iG6i4onEMuXYTEJdqWumd+UzCxLxwxhfC6c9U8epBGm8F+qF0Ht9TbeXGW
+	4f1Bug2mMgeXyV3jXzUO9SfWNYTUkaLczXghIWLdb9+g17oGlsFED/bDQr+GaQh0OIGa1OnyC3U
+	LGCCNofE/P+UtEmd0auNnHCmnelY6WXQQ+dVgmYllCFfrchZIEXp8Aj2UjHrRb3jWC9rCIiDGys
+	oqqtJbFcW+GKJncbtw+3EAP0KlXOEVOcmRs+GvUpWLEWH465kOsxRCBt4/bAY/k6I9qIzYW8Anl
+	qbmzexSFhH7e1B36AdGLJ40Y/UXCWV8uUzCni2H3po/k7PqgE4EQv4egiC7jwvFI2wpeD2exaW5
+	ISxgcjcfg570DEhiHKCNkNZ/TM7ZspMRGDrYx3XD5S/0z+A83hBWeTzBUC45sApLQc3iCwf1Hp+
+	cyKeNMzPY4gUUGZqjYRP1GvBrPG7gqblIo76zbA++B4ZmWYP0jPlA97gc9wxhryvLSQ9lOPwvbR
+	W55YBuLozTtJ0dMX++0NA76Ml19RpCYL/wvGHs40hth3LY/bPfQAw7AHM2IalAXO6LdyhV3pcSq
+	6L6cv+KiqYK4/kaOPlPAhNdYeV3A+7W5tENr5U86Y76U8WN5c4pObSfh/zYz3fIGgl/XM3CGs4E
+	Tvd3RpqPRfc8qeABcV9Z1fuYHkn/cuDcLxyFxB2DqbMjLRpRbgysv2361atfn5dO/kJY0j96Rho
+	kTy+eF2LLVpiA/rG/5yFfFBbQdVGV9JPa7AwBnb4x0GD0bXpacUbin0D6WDAim8R2tsphbXzoZP
+	BHf4GtiindRAH8Mo/U4B8kU6WdSy/3/0Kmvw5Yj6tetaW1CJKw7mZblW6UhSwct6vewZGHNPCtI
+	SJt780EfGkdAJOPChIZmHbIgYha+jzWq6qyURfeyrI8ApN3x4g==
+X-policyd-weight:  NOT_IN_SPAMCOP=-3 CL_IP_EQ_FROM_MX=-3.1; rate: -6.1
+Received: from soerli.wanderreitkarte.de (soerli.wanderreitkarte.de [49.12.134.96])
+	by dd40612.kasserver.com (Postfix) with ESMTPS id A1B1D4F83F93
+	for <onTour@clausjbauer.de>; Mon,  2 Nov 2026 11:31:20 +0100 (CET)
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/simple; d=wanderreitkarte.de;
+	s=2024; t=1793615480;
+	bh=T3SVU4eSGYCrhpIHa7dZqlPqSJjgM0y5Y4/FUMgcO10=;
+	h=Date:Subject:To:References:From:In-Reply-To:From;
+	b=Lbtsrbad/PBCV7KTUi/sQjGoGgNw6jsyEdxheI4qT8znmB7iPHt9e7ErfNriT+mqH
+	 TFL7sDpyIPtS8SU6WutbaQFYgNSDnvlTFtGAcC9ZWxN18acsCz/nSYoTTrFo1m8vkK
+	 X/RDwZSdzXG1S3CSoG/O+2t+g+20Y9MOS3rKjoLAzHVX8rklqPiA4+X2FqoZAHn32Z
+	 ehKSmg8RxwXF6EIWWMYTQJQNRAQFE0cmt34DFXJSBHUMQtT6FuD9rHeLqQiVIZ9bQM
+	 Ytcys08oKFTsPh7xt9+BIp9pOoZz7q61pOV0NRpdzr+0js0eM9bKE2+UcJpo9BuObb
+	 LMDNsrCzGe+JQ==
+Received: from [192.168.178.48] (p5b337c0a.dip0.t-ipconnect.de [91.51.124.10])
+	by soerli.wanderreitkarte.de (Postfix) with ESMTPSA id 047741746E2F
+	for <onTour@clausjbauer.de>; Mon,  2 Nov 2026 11:31:19 +0100 (CET)
+Content-Type: multipart/alternative;
+ boundary="------------pwg3IfnfYfInRoAp0YsAD0tr"
+Message-ID: <e89f21b5-cae5-43c3-938e-d1591895e371@wanderreitkarte.de>
+Date: Mon, 2 Nov 2026 11:31:17 +0100
+MIME-Version: 1.0
+User-Agent: Mozilla Thunderbird
+Subject: Re: Anfrage zur Nutzung der Kacheln von topo.wanderreitkarte.de in
+ einer Android-App
+To: "Claus J. Bauer" <onTour@clausjbauer.de>
+References: <34193e86-e316-4bd4-8aab-d72fefc72ec4@clausjbauer.de>
+From: Nop <nop@wanderreitkarte.de>
+In-Reply-To: <34193e86-e316-4bd4-8aab-d72fefc72ec4@clausjbauer.de>
+X-Dmarc-Test: Allow
+X-Spamd-Bar: ---
+X-KasLoop: m0819bcf
+
+This is a multi-part message in MIME format.
+--------------pwg3IfnfYfInRoAp0YsAD0tr
+Content-Type: text/plain; charset=UTF-8; format=flowed
+Content-Transfer-Encoding: 8bit
+
+
+Hallo Claus,
+
+
+Ich sage jetzt einfach mal Claus, mein Name ist Klaus. ;-)
+
+Vielen Dank für die freundliche und rechtzeitige Anfrage. Fühlt sich 
+sehr professionell an.
+
+Am 02.11.2026 um 10:48 schrieb Claus J. Bauer:
+>
+> Dabei gehe ich so vor:
+> - Aufruf der Kacheln über 
+> https://topo.wanderreitkarte.de/topo/{z}/{x}/{y}.png
+>
+> - eigener User-Agent „onTour/1.0 (de.clausjbauer.ontour)“
+> - lokaler Kachel-Cache, aber kein Massen-Download und kein Vorab-Laden
+> - dauerhaft sichtbare Quellenangabe auf der Karte („Reit- und 
+> Wanderkarte“, CC-BY-NC-SA, © OpenStreetMap-Mitwirkende) mit Link sowie 
+> ein Hinweis auf der Info-Seite
+>
+> Ich habe Ihre Lizenzseite bzw das Impressum gelesen. Bitte teilen Sie 
+> mir mit:
+> 1. Ist diese Nutzung in meiner App im Play Store für Sie so in Ordnung?
+>
+Technisch ist die Anbindung so einwandfrei umgesetzt. Ich würde dann 
+meinerseits eine Whitelist-Regel für den Agent auf meinem Server 
+einrichten, der die Zugriffe vor dem Bot-Blocker schützt.
+>
+> 2. Gibt es von Ihrer Seite weitere Bedingungen oder eine erwartete 
+> Beteiligung an den Serverkosten?
+>
+Eine wichtige Info fehlt noch. Wenn die App werbefrei ist gehe ich davon 
+aus daß sie ein bischen was kostet. In diesem Fall erwarte ich einen 
+kleinen, einmaligen Unkostenbeitrag. Dann stelle ich immer die Frage: 
+Wieviel hältst Du für fair und angemessen?
+
+Falls die App doch kostenlos ist, ist meine Karte ebenfalls kostenlos.
+>
+> 3. Möchten Sie die Quellenangabe in einer bestimmten Form sehen?
+>
+Eine kleine Änderung bei der Attributierung: CC-BY-NC-SA, © *Daten* 
+OpenStreetMap-Mitwirkende
+
+Das Copyright für die Karte liegt bei mir, die Nennung von OSM betrifft 
+die zugrundeliegenden Daten.
+>
+> Vielleicht mögen Sie mich ja auf Ihrer Links-Seite mit aufnehmen.
+>
+Kann ich für einen weiteren Nutzer der Karte gerne machen. Evtl. willst 
+Du auch die Funktion zur Übertragung einer Route per QR-Code in Deiner 
+App unterstützen, dann hätten wir schon sowas wie eine technische 
+Partnerschaft.
+
+
+  viele Grüße
+
+
+         Klaus
+
+
+
+--------------pwg3IfnfYfInRoAp0YsAD0tr
+Content-Type: text/html; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  </head>
+  <body text="#000000" bgcolor="#e3e3e3">
+    <div class="moz-cite-prefix"><br>
+      Hallo Claus,<br>
+      <br>
+      <br>
+      Ich sage jetzt einfach mal Claus, mein Name ist Klaus. ;-)<br>
+      <br>
+      Vielen Dank für die freundliche und rechtzeitige Anfrage. Fühlt
+      sich sehr professionell an.<br>
+      <br>
+      Am 02.11.2026 um 10:48 schrieb Claus J. Bauer:<br>
+    </div>
+    <blockquote type="cite"
+      cite="mid:34193e86-e316-4bd4-8aab-d72fefc72ec4@clausjbauer.de">
+      <p>Dabei gehe ich so vor:<br>
+        - Aufruf der Kacheln über <a class="moz-txt-link-freetext"
+          href="https://topo.wanderreitkarte.de/topo/"
+          moz-do-not-send="true">https://topo.wanderreitkarte.de/topo/</a>{z}/{x}/{y}.png</p>
+      <p>- eigener User-Agent „onTour/1.0 (de.clausjbauer.ontour)“<br>
+        - lokaler Kachel-Cache, aber kein Massen-Download und kein
+        Vorab-Laden<br>
+        - dauerhaft sichtbare Quellenangabe auf der Karte („Reit- und
+        Wanderkarte“, CC-BY-NC-SA, © OpenStreetMap-Mitwirkende) mit Link
+        sowie ein Hinweis auf der Info-Seite<br>
+        <br>
+        Ich habe Ihre Lizenzseite bzw das Impressum gelesen. Bitte
+        teilen Sie mir mit:<br>
+        1. Ist diese Nutzung in meiner App im Play Store für Sie so in
+        Ordnung?<br>
+      </p>
+    </blockquote>
+    Technisch ist die Anbindung so einwandfrei umgesetzt. Ich würde dann
+    meinerseits eine Whitelist-Regel für den Agent auf meinem Server
+    einrichten, der die Zugriffe vor dem Bot-Blocker schützt.
+    <blockquote type="cite"
+      cite="mid:34193e86-e316-4bd4-8aab-d72fefc72ec4@clausjbauer.de">
+      <p>2. Gibt es von Ihrer Seite weitere Bedingungen oder eine
+        erwartete Beteiligung an den Serverkosten?<br>
+      </p>
+    </blockquote>
+    Eine wichtige Info fehlt noch. Wenn die App werbefrei ist gehe ich
+    davon aus daß sie ein bischen was kostet. In diesem Fall erwarte ich
+    einen kleinen, einmaligen Unkostenbeitrag. Dann stelle ich immer die
+    Frage: Wieviel hältst Du für fair und angemessen?<br>
+    <br>
+    Falls die App doch kostenlos ist, ist meine Karte ebenfalls
+    kostenlos.
+    <blockquote type="cite"
+      cite="mid:34193e86-e316-4bd4-8aab-d72fefc72ec4@clausjbauer.de">
+      <p>3. Möchten Sie die Quellenangabe in einer bestimmten Form
+        sehen?<br>
+      </p>
+    </blockquote>
+    Eine kleine Änderung bei der Attributierung: CC-BY-NC-SA, © <b>Daten</b>
+    OpenStreetMap-Mitwirkende<br>
+    <br>
+    Das Copyright für die Karte liegt bei mir, die Nennung von OSM
+    betrifft die zugrundeliegenden Daten.
+    <blockquote type="cite"
+      cite="mid:34193e86-e316-4bd4-8aab-d72fefc72ec4@clausjbauer.de">
+      <p>Vielleicht mögen Sie mich ja auf Ihrer Links-Seite mit
+        aufnehmen. </p>
+    </blockquote>
+    Kann ich für einen weiteren Nutzer der Karte gerne machen. Evtl.
+    willst Du auch die Funktion zur Übertragung einer Route per QR-Code
+    in Deiner App unterstützen, dann hätten wir schon sowas wie eine
+    technische Partnerschaft.<br>
+    <br>
+    <br>
+    <p> viele Grüße</p>
+    <p><br>
+    </p>
+    <p>        Klaus<br>
+      <br>
+      <br>
+      <br>
+    </p>
+  </body>
+</html>
+
+--------------pwg3IfnfYfInRoAp0YsAD0tr--
+

@@ -1,6 +1,6 @@
 import 'dart:math' as math;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// Steuerelement zum Ausrichten der Karte nach Norden UND zum Einrasten
 /// dieser Ausrichtung - Standard-Verhalten aus der frühen, inzwischen
@@ -36,9 +36,7 @@ class NorthLockButton extends StatelessWidget {
     return Tooltip(
       message: locked ? 'Nordausrichtung wieder freigeben' : 'Nordausrichtung einrasten',
       child: Material(
-        color: locked
-            ? Theme.of(context).colorScheme.primaryContainer
-            : Theme.of(context).colorScheme.surface.withValues(alpha: 0.9),
+        color: locked ? Theme.of(context).colorScheme.primaryContainer : Theme.of(context).colorScheme.surface.withValues(alpha: 0.9),
         shape: const CircleBorder(),
         elevation: 4,
         child: InkWell(
@@ -53,9 +51,7 @@ class NorthLockButton extends StatelessWidget {
                   angle: -rotationDegrees * math.pi / 180,
                   child: Icon(
                     Icons.navigation,
-                    color: locked
-                        ? Theme.of(context).colorScheme.onPrimaryContainer
-                        : Theme.of(context).colorScheme.primary,
+                    color: locked ? Theme.of(context).colorScheme.onPrimaryContainer : Theme.of(context).colorScheme.primary,
                   ),
                 ),
                 if (locked)

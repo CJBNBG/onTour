@@ -1,6 +1,6 @@
 import 'package:auto_hyphenating_text/auto_hyphenating_text.dart';
-import 'package:flutter/cupertino.dart';
-import 'package:flutter/material.dart';
+import 'package:cupertino_ui/cupertino_ui.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../models/map_style.dart';
 import '../models/position_display_format.dart';
@@ -53,8 +53,7 @@ class _SettingsPageState extends State<SettingsPage> with SingleTickerProviderSt
   /// Obergrenze der Pause-Erinnerung in Minuten (0 = aus).
   static const int _maxReminderMinutes = 120;
 
-  late final FixedExtentScrollController _reminderWheelController =
-      FixedExtentScrollController(initialItem: widget.preferences.autoPauseReminderMinutes);
+  late final FixedExtentScrollController _reminderWheelController = FixedExtentScrollController(initialItem: widget.preferences.autoPauseReminderMinutes);
 
   @override
   void dispose() {
@@ -403,8 +402,7 @@ class _SettingsPageState extends State<SettingsPage> with SingleTickerProviderSt
             width: double.infinity,
             child: SegmentedButton<int>(
               segments: [
-                for (final value in SpeedScale.optionsFor(unit))
-                  ButtonSegment(value: value, label: Text('$value')),
+                for (final value in SpeedScale.optionsFor(unit)) ButtonSegment(value: value, label: Text('$value')),
               ],
               selected: {widget.preferences.speedScaleMax(unit)},
               onSelectionChanged: (selection) {
@@ -738,8 +736,7 @@ class _SettingsPageState extends State<SettingsPage> with SingleTickerProviderSt
             itemExtent: 40,
             useMagnifier: true,
             magnification: 1.15,
-            onSelectedItemChanged: (value) =>
-                widget.preferences.setAutoPauseReminderMinutes(value),
+            onSelectedItemChanged: (value) => widget.preferences.setAutoPauseReminderMinutes(value),
             children: [
               for (var i = 0; i <= _maxReminderMinutes; i++)
                 Center(

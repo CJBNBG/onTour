@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// Label für [ButtonSegment]s mit dem Symbol OBERHALB des Textes -
 /// dadurch bleibt der Text auch bei schmalen Displays einzeilig, was

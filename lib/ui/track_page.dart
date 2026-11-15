@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:auto_hyphenating_text/auto_hyphenating_text.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
@@ -187,7 +187,7 @@ class _TrackPageState extends State<TrackPage> with SingleTickerProviderStateMix
           'die offenbar nicht regulär beendet wurde (z. B. durch ein '
           'unerwartetes Beenden der App). Sie enthält '
           '${recovered.points.length} Punkte '
-          '(${TrackFormatter.formatDistance(recovered.distanceMeters)}). '
+          '(${TrackFormatter.formatDistance(recovered.distanceMeters, nautical: widget.preferences.nauticalTrackUnits)}). '
           'Möchtest du sie als Track speichern?',
         ),
         actions: [
@@ -840,7 +840,10 @@ class _TrackPageState extends State<TrackPage> with SingleTickerProviderStateMix
         children: [
           _buildMomentaryValuesCard(context, latest),
           const SizedBox(height: 28),
-          TrackProfileCharts(profile: profile),
+          TrackProfileCharts(
+            profile: profile,
+            nautical: widget.preferences.nauticalTrackUnits,
+          ),
         ],
       ),
     );
@@ -859,7 +862,8 @@ class _TrackPageState extends State<TrackPage> with SingleTickerProviderStateMix
   /// [_buildMomentaryStat]).
   Widget _buildMomentaryValuesCard(BuildContext context, TrackProfilePoint latest) {
     final headingDegrees = widget.recordingService.currentHeadingDegrees;
-    final speedKmh = latest.speedMetersPerSecond != null ? latest.speedMetersPerSecond! * 3.6 : null;
+    final speedMs = latest.speedMetersPerSecond;
+    final nautical = widget.preferences.nauticalTrackUnits;
 
     return Card(
       child: Padding(
@@ -873,7 +877,7 @@ class _TrackPageState extends State<TrackPage> with SingleTickerProviderStateMix
                   child: _buildMomentaryStat(
                     context,
                     'Geschwindigkeit',
-                    speedKmh != null ? '${speedKmh.toStringAsFixed(1)} km/h' : '-',
+                    speedMs != null ? TrackFormatter.formatSpeed(speedMs, nautical: nautical) : '-',
                   ),
                 ),
                 Expanded(
@@ -951,11 +955,22 @@ class _TrackPageState extends State<TrackPage> with SingleTickerProviderStateMix
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 _buildStat(context, 'Dauer', TrackFormatter.formatDuration(duration)),
-                _buildStat(context, 'Distanz', TrackFormatter.formatDistance(distanceMeters)),
+                _buildStat(
+                  context,
+                  'Distanz',
+                  TrackFormatter.formatDistance(
+                    distanceMeters,
+                    nautical: widget.preferences.nauticalTrackUnits,
+                  ),
+                ),
                 _buildStat(
                   context,
                   'Ø-Tempo',
-                  TrackFormatter.formatAverageSpeed(distanceMeters, duration),
+                  TrackFormatter.formatAverageSpeed(
+                    distanceMeters,
+                    duration,
+                    nautical: widget.preferences.nauticalTrackUnits,
+                  ),
                 ),
                 if (state == RecordingState.paused)
                   Icon(
@@ -1169,7 +1184,7 @@ class _TrackPageState extends State<TrackPage> with SingleTickerProviderStateMix
         destination.latitude,
         destination.longitude,
       );
-      info = 'Luftlinie ${TrackFormatter.formatDistance(meters)} · '
+      info = 'Luftlinie ${TrackFormatter.formatDistance(meters, nautical: widget.preferences.nauticalTrackUnits)} · '
           '${bearing.round() % 360}\u00B0';
     }
 
@@ -1457,7 +1472,7 @@ class _TrackPageState extends State<TrackPage> with SingleTickerProviderStateMix
           title: AutoHyphenatingText(track.name),
           subtitle: AutoHyphenatingText(
             '${TrackFormatter.formatDateTime(track.startTime)} · '
-            '${TrackFormatter.formatDistance(track.distanceMeters)} · '
+            '${TrackFormatter.formatDistance(track.distanceMeters, nautical: widget.preferences.nauticalTrackUnits)} · '
             '${TrackFormatter.formatDuration(track.recordedDuration)}',
           ),
           trailing: Row(

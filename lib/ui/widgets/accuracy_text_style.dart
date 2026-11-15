@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// Einheitlicher Textstil für alle "Genauigkeit: ..."-Zeilen der App
 /// (Tacho-, Kompass-Seite): bewusst klein, aber noch gut lesbar. Eine

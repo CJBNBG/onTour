@@ -3303,3 +3303,147 @@ Gebäude ohne Fix.
 **Betroffene Dateien:** `lib/services/track_recording_service.dart`
 (`interruptionReason`, Prüfung im Sekundentakt),
 `lib/ui/widgets/recording_indicator.dart`.
+
+## 66. Berechtigungstexte in einfacher Sprache
+
+Die Texte im Abschnitt "Berechtigungen" der Info-Seite (Abschnitt 62) sind
+jetzt für Laien formuliert: kurze Erklärung, wofür onTour die jeweilige
+Erlaubnis braucht und was ohne sie passiert, ohne technische Namen. Die
+fünf Einträge heißen: Standort, Aufzeichnung im Hintergrund,
+Benachrichtigungen, Gerät wach halten, Internet. Ein Abschlusstext nennt,
+was keine Erlaubnis braucht (Sensoren, Dateien speichern/teilen) und dass
+onTour nicht auf Kontakte, Fotos, Kamera, Mikrofon oder Nachrichten
+zugreift.
+
+Die technischen Namen (z. B. ACCESS_FINE_LOCATION, FOREGROUND_SERVICE_LOCATION,
+POST_NOTIFICATIONS, WAKE_LOCK, INTERNET) stehen nicht mehr in der App. Sie
+bleiben in der `AndroidManifest.xml` und sind für die Angaben in der Play
+Console nötig - dort können die Begründungen aus diesen Texten
+sinngemäß übernommen werden.
+
+**Pflege:** Der Satz "Deine Strecken und Positionen bleiben auf deinem
+Gerät" gilt für den heutigen Stand der App und muss überprüft werden, sobald
+eine Funktion Daten hochlädt. Die Liste `_permissions` in `info_page.dart`
+muss bei Änderungen am Manifest mitgepflegt werden.
+
+**Betroffene Dateien:** `lib/ui/info_page.dart`.
+
+## 67. Eigenes Symbol für das Profil "Eigene"
+
+Das Profil "Eigene" nutzte dasselbe Regler-Symbol (`Icons.tune`) wie der
+Hinweis "Höhe kalibrieren" in der Höhen-Kachel der Start-Seite. Es hat jetzt
+ein eigenes Symbol (`Icons.person`, Person). Das Symbol erscheint in der
+Profil-Leiste der Start-Seite und in den Profil-Chips unter Einstellungen ->
+Start; das Regler-Symbol bleibt der Kalibrierung vorbehalten.
+
+**Betroffene Dateien:** `lib/models/user_profile.dart`.
+
+## 68. Profil "Segler": Track-Auswertung in Seemeilen und Knoten
+
+Im Profil "Segler" erfolgt die Auswertung von Tracks in **Seemeilen (sm)**
+und **Knoten (kn)** statt in km und km/h (1 sm = 1852 m, 1 m/s = 1,94384 kn).
+Das gilt für:
+- Statuskarte der laufenden Aufzeichnung (Distanz, Ø-Tempo) und die
+  Momentan-Geschwindigkeit auf dem Details-Tab,
+- Liste gespeicherter Tracks, Statuskarte der Detailansicht (Distanz,
+  Ø-Tempo), den Wiederherstellungs-Dialog nach unerwartetem Beenden,
+- die Profil-Diagramme (Geschwindigkeitsprofil in kn, x-Achse in sm) auf
+  beiden Details-Tabs,
+- die Luftlinie zum Ziel auf der Track-Karte.
+
+**Darstellung:** Strecken unter 100 m in Metern, darunter in sm - unter
+1 sm mit zwei Nachkommastellen ("0,45 sm"), ab 1 sm mit einer ("12,3 sm").
+Geschwindigkeiten mit einer Nachkommastelle ("5,8 kn").
+
+**Umsetzung:** `TrackFormatter.formatDistance/formatAverageSpeed` und neu
+`formatSpeed` haben den Parameter `nautical`. `AppPreferences.nauticalTrackUnits`
+ist wahr im Profil "Segler" und wird von TrackPage, TrackDetailPage und den
+Diagrammen (`TrackProfileCharts.nautical`, `ProfileChart.distanceUnit`)
+verwendet. Gespeichert wird weiterhin in Metern und m/s - die Umstellung
+wirkt nur auf die Anzeige und gilt beim Wechsel des Profils sofort, auch für
+zuvor in einem anderen Profil aufgezeichnete Tracks. Höhe, Höhenänderung und
+Steigung bleiben in m bzw. %.
+
+**Nebenwirkung:** Die Momentan-Geschwindigkeit auf dem Details-Tab der
+Track-Seite hat jetzt (wie die übrigen Werte) ein Komma statt eines Punktes
+als Dezimaltrenner.
+
+**Nicht umgestellt:** Die Tempo-Einheit der Tacho-Seite und der Start-Seite
+(eigene Einstellung je Profil, Abschnitt 56) und der GPX-Export (Standard).
+
+**Betroffene Dateien:** `lib/util/track_formatter.dart`,
+`lib/services/app_preferences.dart`, `lib/ui/track_page.dart`,
+`lib/ui/track_detail_page.dart`, `lib/ui/widgets/track_profile_charts.dart`,
+`lib/ui/widgets/profile_chart.dart`.
+
+## 69. Info-Seite: Umrechnungsfaktoren
+
+Neuer, kleiner Abschnitt "Umrechnungsfaktoren" auf der Info-Seite (unter
+"Berechtigungen", vor "Kartenmaterial"). Er nennt, womit onTour Messwerte
+für die Anzeige umrechnet - intern wird alles in Metern und Metern pro
+Sekunde geführt:
+
+| Größe | Faktor |
+|---|---|
+| 1 m/s | = 3,6 km/h |
+| 1 m/s | = 1,94384 kn |
+| 1 m/s | = 2,23694 mph |
+| 1 Seemeile (sm) | = 1852 m = 1,852 km |
+| 1 Knoten (kn) | = 1 sm pro Stunde |
+| 1 Meile (mi, für mph) | = 1.609,344 m |
+| 1 Grad (°) | = 60 Minuten (') = 3600 Sekunden (") |
+
+Die Zahlen werden nicht von Hand in den Text geschrieben, sondern aus den
+Konstanten gebildet, mit denen die App tatsächlich rechnet
+(`SpeedUnit.fromMetersPerSecond`, `TrackFormatter.metersPerNauticalMile`) -
+Anzeige und Berechnung können nicht auseinanderlaufen. Ändert sich ein
+Faktor im Code, ändert sich die Anzeige mit. (Meile und Grad/Minuten/Sekunden
+stehen als feste Texte, sie sind im Code ebenfalls als Zahlen eingetragen.)
+
+**Betroffene Dateien:** `lib/ui/info_page.dart`.
+
+## 70. Hinweis "keine Navigation" mit Bestätigungspflicht
+
+**Zweck:** onTour ist nicht zur Navigation gedacht und nicht dafür geeignet.
+Das stellt ein eindeutiger Hinweis klar, der bei jedem Start erscheint, bis
+der Nutzer ausdrücklich bestätigt, ihn gelesen und verstanden zu haben.
+
+**Ablauf:**
+- `HomeShell` zeigt den Hinweis nach dem ersten Aufbau der Oberfläche
+  (`showNavigationNoticeDialog`, `ui/navigation_notice_dialog.dart`), solange
+  `AppPreferences.navigationNoticeAccepted` falsch ist. Das ist vor dem
+  ersten Standort-Abfragen der Fall: Auf der Start-Seite läuft ohne gewähltes
+  Profil noch kein Sensor.
+- Der Dialog lässt sich nicht wegtippen (`barrierDismissible: false`) und
+  nicht mit der Zurück-Taste schließen (`PopScope`). Er enthält vier kurze
+  Absätze, eine Checkbox "Ich habe diesen Hinweis gelesen und verstanden: ..."
+  und zwei Knöpfe: "Verstanden" (erst nach Anhaken aktiv) und "App beenden".
+- "Verstanden" speichert die Bestätigung (Version des Hinweises und Zeitpunkt,
+  `AppPreferences.acceptNavigationNotice`). Danach erscheint der Dialog nicht
+  mehr. Wer die App nur beendet, sieht ihn beim nächsten Start wieder - auch
+  bei erhaltenem App-Prozess (persistente Engine, Abschnitt 21), weil der
+  Dialog dann noch offen ist.
+- Auf der Info-Seite steht derselbe Text jederzeit nachlesbar in einem
+  Hinweiskasten ganz oben.
+
+**Wortlaut:** zentral in `util/navigation_notice.dart` (`NavigationNotice`),
+damit Dialog und Info-Seite immer dasselbe sagen. Inhalt: kein
+Navigationsgerät; Anzeigen können ungenau, verzögert, falsch oder ausgefallen
+sein (auch Luftlinie/Richtung zum Ziel ist keine Routenführung); Karten und
+Seemarken stammen von Dritten und sind nicht amtlich; nicht darauf verlassen,
+wenn Sicherheit, Gesundheit oder Eigentum betroffen sind, nicht bedienen
+beim Führen eines Fahrzeugs oder Bootes.
+
+**Erneut bestätigen lassen:** Ändert sich der Inhalt wesentlich,
+`AppPreferences.currentNavigationNoticeVersion` erhöhen - dann muss jeder
+Nutzer den Hinweis erneut bestätigen. Nach dem Update auf diese Version
+sehen ihn alle bestehenden Nutzer einmal.
+
+**Rechtlicher Hinweis:** Der Wortlaut ist ein Entwurf, keine Rechtsberatung.
+Er sollte vor der Veröffentlichung von einer fachkundigen Person geprüft
+werden. Eine inhaltlich passende Aussage gehört außerdem in die
+Store-Beschreibung.
+
+**Betroffene/neue Dateien:** `lib/util/navigation_notice.dart` (NEU),
+`lib/ui/navigation_notice_dialog.dart` (NEU), `lib/services/app_preferences.dart`,
+`lib/ui/home_shell.dart`, `lib/ui/info_page.dart`.

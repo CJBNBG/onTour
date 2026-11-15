@@ -1,0 +1,199 @@
+Return-Path: <nop@wanderreitkarte.de>
+X-Spam-Checker-Version: SpamAssassin 4.0.0 (2022-12-13) on
+	dd40612.kasserver.com
+X-Original-To: onTour@clausjbauer.de
+Delivered-To: m0819bcf@dd40612.kasserver.com
+Authentication-Results: dd40612.kasserver.com;
+	dkim=pass (2048-bit key; unprotected) header.d=wanderreitkarte.de header.i=@wanderreitkarte.de header.a=rsa-sha256 header.s=2024 header.b=CGE/bY0+;
+	dkim-atps=neutral
+X-KAS-Sym: v3:f51bdf72230551df:LW2QoACaTvqnMSfQmsg6xoR9zyBRlf3WLKH1TLtR0Akk8
+	H4nV0Co5cU80lqqwJVrlLFsAOYTFKNevIJmkTIUVHiLnUKOKLVr97Ad61qPicvzqZtGwGRnaXmA
+	9o0AgxbCc48pvjhdxUK+3rPZbjF+HiJlbZEgB8q6G5CnKsjLj6Au7Mbs1psg52NyM0kxvRPCf2U
+	fz1zXRZU0IvROA9N9c9ww3lTIxXchgLeZx2cJ5pCEH5grVWBpBe0CE38YZZT//BRMbBYDoG8ynV
+	5XJHS0mlQYx0LWIVR4SArpShkEL1fEKO1mE9Zmzr6rgSGwRb31UQMeSnahomDe9+C+Z4jufw==:
+	p8OEpGa6U9CEOjdAQS5OHFhJSYTz3aluBJfj5mIzb1vxTyi0aldk8n4AE34tKaCy60w2Ap80sQ1
+	IyKiIKd5TW3MIz6hBqpI9uRzjKnuXD1HRa+zfAsfyQ454XF6DWwJVQsBj6lpINw5C5brt9IROpl
+	MuahNAShxfbbbIGJxAJhFMDUUwOQM5PGFLWcnmUzHhHwOeOr3XamLYI6bGOEdB3HMApycDhPvH3
+	WmU7r1iKGtsm6pFCqUfo1G/9hxzXSHdcMr0Bu2U2cw8dDTo8kCOLGVtkqJnkej52B7OoQoaoLiO
+	W6Dp2FbQp4iu6Qr5PIk7N6TJDRyTF42Y6T0NBObAEcQ18GQ6cxkvpYq/sa1S4rBbJ088eHbe6Wh
+	Va+M5oBKSmzVsmkYDBq92EtkZA0sKPPIfyP3rsYxQHN0IIvVaie+dSv3QSGpC4OoYdyJ4/3h51K
+	PDAZ4MVqzoKAmWTgUVF/16mAMVMvsTfM3s02rSW6g7c5SDJeIWhwNTzJMSKopf6y6Vy4NQmF7jT
+	ZfxzC/lfYTVddlmjVC50WJPq99equqnroWraQu7NdmNLgMH5JQHeyFsx2eWkkq4Yv2opNsN6EIX
+	XGevBW7NstyFugiZGi3yVRF6xEJ/vJukbyh1DI7e+804Q+/d8RWpRyUjJN17btf00LvWOEl3Hwv
+	zoS73D0+ewkg/kQODyc9lZN+Z00agQl+ttE7z42XIlg9caPribP8wo/SSN3OnF4pkMeI7Az7oC4
+	l7Um7t8sJblWtCCrfFZ15W62REZtJp3PXXbYkomVpe3pGBHhtVErxZtHOWZJCM+JBE7ZXmiP2zv
+	GxZLiZGwI63KoHyrs1VinLqxlAr/w0zEHle7bG5kZR2fTWI1TeXbIOUuzH1PbUOLhVOhWFOmIwk
+	/P5tAvCNjvJLkpGVj/Jxpx5rNOIYel/0XzT1E3z+
+X-policyd-weight: using cached result; rate: -6.1
+Received: from soerli.wanderreitkarte.de (soerli.wanderreitkarte.de [49.12.134.96])
+	by dd40612.kasserver.com (Postfix) with ESMTPS id E88464F83D95
+	for <onTour@clausjbauer.de>; Mon,  2 Nov 2026 15:02:31 +0100 (CET)
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/simple; d=wanderreitkarte.de;
+	s=2024; t=1793628151;
+	bh=B5OLaJlCrQZ/92JEJRkpIzzN+lF5pCPKpPmmecOGBLk=;
+	h=Date:Subject:To:References:From:In-Reply-To:From;
+	b=CGE/bY0+/yzNed3ffIeox9OL+YmxG2R3alztv6XTGtnLcgc+v8vd5fBlg6HjrEcMr
+	 C1iCXdXSam8a3faFxBLdsaLMkQIy3Hfyr+42oRPiZwZ8MV/iRWN+9LDigYKJQJyT5e
+	 yBPyKRjaTXUvEZixAkrhIzmsUHrrGW44Q8n1PT3zlcm5TL/uBiAeUPstB5pglr65Bq
+	 ei4HHRoW42YhoL3pd7q2dvVJDrl23NHWUQe//kUUESlcr71Pmlw5ZYyC7S8c6ijA9p
+	 KArRPNrMLGneI1pUe9Hwi+xBOZ+JaanxKNnFw1Mnk0/QoDAq7RDMlW6OSx/K3B4fDg
+	 FY5yiKLaj0JhQ==
+Received: from [192.168.178.48] (p5b337c0a.dip0.t-ipconnect.de [91.51.124.10])
+	by soerli.wanderreitkarte.de (Postfix) with ESMTPSA id 9108F1746E31
+	for <onTour@clausjbauer.de>; Mon,  2 Nov 2026 15:02:31 +0100 (CET)
+Content-Type: multipart/alternative;
+ boundary="------------yhOkNN80o7r6KSKIaZrMfDDe"
+Message-ID: <5e6426b7-16f6-4e8c-9b74-43a8b70a199f@wanderreitkarte.de>
+Date: Mon, 2 Nov 2026 15:02:31 +0100
+MIME-Version: 1.0
+User-Agent: Mozilla Thunderbird
+Subject: Re: Anfrage zur Nutzung der Kacheln von topo.wanderreitkarte.de in
+ einer Android-App
+To: "Claus J. Bauer" <onTour@clausjbauer.de>
+References: <34193e86-e316-4bd4-8aab-d72fefc72ec4@clausjbauer.de>
+ <e89f21b5-cae5-43c3-938e-d1591895e371@wanderreitkarte.de>
+ <5aa50275-4070-4b4a-b12d-0cf07b9ed843@clausjbauer.de>
+From: Nop <nop@wanderreitkarte.de>
+In-Reply-To: <5aa50275-4070-4b4a-b12d-0cf07b9ed843@clausjbauer.de>
+X-Spamd-Bar: ---
+X-Dmarc-Test: Allow
+X-KasLoop: m0819bcf
+
+This is a multi-part message in MIME format.
+--------------yhOkNN80o7r6KSKIaZrMfDDe
+Content-Type: text/plain; charset=UTF-8; format=flowed
+Content-Transfer-Encoding: 8bit
+
+
+
+Hallo Claus,
+
+Am 02.11.2026 um 12:18 schrieb Claus J. Bauer:
+>>
+>> Falls die App doch kostenlos ist, ist meine Karte ebenfalls kostenlos.
+> Ja, die App wird kostenlos angeboten werden (wie auch die andere/n 
+> App/s von mir) - das habe ich leider vergessen oben zu erwähnen.
+Umso besser!
+>>>
+>>> Vielleicht mögen Sie mich ja auf Ihrer Links-Seite mit aufnehmen.
+>>>
+>> Kann ich für einen weiteren Nutzer der Karte gerne machen. Evtl. 
+>> willst Du auch die Funktion zur Übertragung einer Route per QR-Code 
+>> in Deiner App unterstützen, dann hätten wir schon sowas wie eine 
+>> technische Partnerschaft.
+>
+> Wenn ich ehrlich bin, kann ich mir gar nicht so genau vorstellen, wie 
+> dein Vorschlag technisch aussehen würde, denn die GPX-Daten, die ich 
+> exportieren bzw. importieren können will, enthalten keinen Bezug zu 
+> einer bestimmten Karte sondern die reinen GPS-Daten. Auf welcher Karte 
+> man sich die Daten dann ansieht, kann man sich aussuchen.
+>
+Meine Karte hat ja nicht nur die Karte sondern auch einen Routenplanner. 
+Und da gibt es immer die Frage wie bekommt man die Route möglichst 
+einfach (und für mich auch ohne Login- und Cloudzwang) in so eine App 
+wie die Deine.
+>
+> Aber eine Partnerschaft klingt schon auch irgendwie interessant - nur wie?
+>
+Schau Dir am Besten mal das Video zur der Funktion an, dann sollte es 
+klar werden https://youtu.be/vsWKtFrPtKo
+
+Darf ich fragen was Dich zu Deinen Projekten inspiriert? Ich vermute da 
+fast ein paar Gemeinsamkeiten. Meine Projekte sind auch grundsätzlich 
+kostenlos - und nicht in der Apple-Welt verfügbar. ;-)
+
+
+  viele Grüße
+
+
+         Klaus
+
+
+PS: Der Reiter Easybbs auf Deiner Seite gibt mir ein "Forbidden"
+
+
+
+--------------yhOkNN80o7r6KSKIaZrMfDDe
+Content-Type: text/html; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  </head>
+  <body text="#000000" bgcolor="#e3e3e3">
+    <div class="moz-cite-prefix"><br>
+    </div>
+    <div class="moz-cite-prefix"><br>
+    </div>
+    <div class="moz-cite-prefix">Hallo Claus,</div>
+    <div class="moz-cite-prefix"><br>
+    </div>
+    <div class="moz-cite-prefix">Am 02.11.2026 um 12:18 schrieb Claus J.
+      Bauer:<br>
+    </div>
+    <blockquote type="cite"
+      cite="mid:5aa50275-4070-4b4a-b12d-0cf07b9ed843@clausjbauer.de">
+      <blockquote type="cite"
+cite="mid:e89f21b5-cae5-43c3-938e-d1591895e371@wanderreitkarte.de"><br>
+        Falls die App doch kostenlos ist, ist meine Karte ebenfalls
+        kostenlos.</blockquote>
+      Ja, die App wird kostenlos angeboten werden (wie auch die andere/n
+      App/s von mir) - das habe ich leider vergessen oben zu erwähnen.</blockquote>
+    Umso besser!
+    <blockquote type="cite"
+      cite="mid:5aa50275-4070-4b4a-b12d-0cf07b9ed843@clausjbauer.de">
+      <blockquote type="cite"
+cite="mid:e89f21b5-cae5-43c3-938e-d1591895e371@wanderreitkarte.de">
+        <blockquote type="cite"
+          cite="mid:34193e86-e316-4bd4-8aab-d72fefc72ec4@clausjbauer.de">
+          <p>Vielleicht mögen Sie mich ja auf Ihrer Links-Seite mit
+            aufnehmen. </p>
+        </blockquote>
+        Kann ich für einen weiteren Nutzer der Karte gerne machen. Evtl.
+        willst Du auch die Funktion zur Übertragung einer Route per
+        QR-Code in Deiner App unterstützen, dann hätten wir schon sowas
+        wie eine technische Partnerschaft.<br>
+      </blockquote>
+      <p>Wenn ich ehrlich bin, kann ich mir gar nicht so genau
+        vorstellen, wie dein Vorschlag technisch aussehen würde, denn
+        die GPX-Daten, die ich exportieren bzw. importieren können will,
+        enthalten keinen Bezug zu einer bestimmten Karte sondern die
+        reinen GPS-Daten. Auf welcher Karte man sich die Daten dann
+        ansieht, kann man sich aussuchen.</p>
+    </blockquote>
+    Meine Karte hat ja nicht nur die Karte sondern auch einen
+    Routenplanner. Und da gibt es immer die Frage wie bekommt man die
+    Route möglichst einfach (und für mich auch ohne Login- und
+    Cloudzwang) in so eine App wie die Deine.
+    <blockquote type="cite"
+      cite="mid:5aa50275-4070-4b4a-b12d-0cf07b9ed843@clausjbauer.de">
+      <p>Aber eine Partnerschaft klingt schon auch irgendwie interessant
+        - nur wie?<br>
+      </p>
+    </blockquote>
+    <p>Schau Dir am Besten mal das Video zur der Funktion an, dann
+      sollte es klar werden <a class="moz-txt-link-freetext" href="https://youtu.be/vsWKtFrPtKo">https://youtu.be/vsWKtFrPtKo</a><br>
+      <br>
+      Darf ich fragen was Dich zu Deinen Projekten inspiriert? Ich
+      vermute da fast ein paar Gemeinsamkeiten. Meine Projekte sind auch
+      grundsätzlich kostenlos - und nicht in der Apple-Welt verfügbar.
+      ;-)<br>
+      <br>
+      <br>
+       viele Grüße</p>
+    <p><br>
+    </p>
+    <p>        Klaus<br>
+      <br>
+      <br>
+      PS: Der Reiter Easybbs auf Deiner Seite gibt mir ein "Forbidden"</p>
+    <p><br>
+      <br>
+    </p>
+  </body>
+</html>
+
+--------------yhOkNN80o7r6KSKIaZrMfDDe--
+

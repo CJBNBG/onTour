@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import 'map_style.dart';
 import 'route_overlay.dart';
@@ -107,7 +107,9 @@ enum UserProfile {
   custom(
     label: 'Eigene Auswahl',
     shortLabel: 'Eigene',
-    icon: Icons.tune,
+    // Bewusst NICHT Icons.tune: Dieses Symbol steht auf der Start-Seite
+    // schon für "Höhe kalibrieren" in der Höhen-Kachel (README Abschnitt 67).
+    icon: Icons.person,
     defaultUnit: SpeedUnit.kilometersPerHour,
     defaultSlots: [
       SlotType.speed,

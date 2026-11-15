@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../../services/track_recording_service.dart';
 
@@ -32,8 +32,7 @@ class RecordingIndicator extends StatefulWidget {
   State<RecordingIndicator> createState() => _RecordingIndicatorState();
 }
 
-class _RecordingIndicatorState extends State<RecordingIndicator>
-    with SingleTickerProviderStateMixin {
+class _RecordingIndicatorState extends State<RecordingIndicator> with SingleTickerProviderStateMixin {
   static const Duration _recordingBlink = Duration(milliseconds: 1100);
   static const Duration _warningBlink = Duration(milliseconds: 600);
 

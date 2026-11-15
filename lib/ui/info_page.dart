@@ -1,20 +1,23 @@
 import 'package:auto_hyphenating_text/auto_hyphenating_text.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
+import 'package:intl/intl.dart' show NumberFormat;
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../models/map_style.dart';
+import '../models/speed_unit.dart';
 //import '../models/route_overlay.dart';
 import '../services/diagnostic_log_service.dart';
+import '../util/navigation_notice.dart';
+import '../util/track_formatter.dart';
 
 /// Eine von der App verwendete Berechtigung samt Begründung (siehe
-/// [_permissions], README Abschnitt 62).
+/// [_permissions], README Abschnitt 62/66).
 class _PermissionInfo {
   final String title;
-  final String technicalName;
   final String reason;
 
-  const _PermissionInfo(this.title, this.technicalName, this.reason);
+  const _PermissionInfo(this.title, this.reason);
 }
 
 /// Info-Seite: Programmautor, App-Name, App-Version sowie ein Zugang zur
@@ -31,49 +34,47 @@ class InfoPage extends StatefulWidget {
 class _InfoPageState extends State<InfoPage> {
   static const _authorName = 'Claus J. Bauer';
 
-  /// Alle in der AndroidManifest.xml angeforderten Berechtigungen mit
-  /// Begründung - bei Änderungen am Manifest hier nachziehen.
+  /// Alle in der AndroidManifest.xml angeforderten Berechtigungen, in
+  /// einfacher Sprache begründet (README Abschnitt 66) - bei Änderungen am
+  /// Manifest hier nachziehen. Die technischen Namen stehen bewusst nicht
+  /// in der App (siehe README Abschnitt 62).
   static const List<_PermissionInfo> _permissions = [
     _PermissionInfo(
-      'Standort (genau und ungefähr)',
-      'ACCESS_FINE_LOCATION, ACCESS_COARSE_LOCATION',
-      'Grundlage fast aller Funktionen: Tempo, Kurs, Höhe und Position, '
-          'Track-Aufzeichnung samt Karte, Anzahl der Satelliten und die '
-          'Korrektur des Kompasses auf geografisch Nord (Missweisung). Android '
-          'fragt beide Stufen gemeinsam ab; die App nutzt die genaue Position. '
-          'Die Abfrage erscheint beim ersten Öffnen einer dieser Funktionen.',
+      'Standort',
+      'Ohne Standort weiß onTour nicht, wo du bist. Er wird gebraucht für '
+          'Tempo, Höhe, Position und Kurs, für die Karte mit deinem Standpunkt '
+          'und für die Aufzeichnung deiner Strecke. Android fragt dabei nach '
+          '"genau" und "ungefähr". onTour braucht die genaue Angabe, sonst '
+          'wären Tempo und Strecke zu ungenau.',
     ),
     _PermissionInfo(
-      'Vordergrunddienst für Standort',
-      'FOREGROUND_SERVICE, FOREGROUND_SERVICE_LOCATION',
-      'Damit eine Track-Aufzeichnung weiterläuft, wenn die App im Hintergrund '
-          'ist oder das Display ausgeht (z. B. während eine Navigations-App '
-          'geöffnet ist). Der Dienst läuft nur während der Aufzeichnung und '
-          'zeigt dafür eine dauerhafte Benachrichtigung. Standortzugriff im '
-          'Hintergrund (ACCESS_BACKGROUND_LOCATION) benötigt die App nicht.',
+      'Aufzeichnung im Hintergrund',
+      'Wenn du eine Strecke aufzeichnest und zwischendurch eine andere App '
+          'benutzt oder das Display ausgeht, soll die Aufzeichnung '
+          'weiterlaufen. Dafür darf onTour im Hintergrund weiterarbeiten. Du '
+          'erkennst das an einer Meldung in der Statusleiste. Das geschieht nur '
+          'während einer Aufzeichnung. Sonst nutzt onTour deinen Standort nur, '
+          'solange die App geöffnet ist.',
     ),
     _PermissionInfo(
       'Benachrichtigungen',
-      'POST_NOTIFICATIONS (ab Android 13)',
-      'Für den Hinweis "onTour zeichnet auf" während einer Aufzeichnung und '
-          'für die Erinnerung, wenn eine Aufzeichnung lange pausiert ist. Ohne '
-          'diese Berechtigung läuft die Aufzeichnung weiter, aber ohne sichtbaren '
-          'Hinweis.',
+      'Damit du siehst, dass eine Aufzeichnung läuft, und damit onTour dich '
+          'erinnern kann, wenn eine Aufzeichnung lange pausiert ist. Ohne diese '
+          'Erlaubnis läuft die Aufzeichnung trotzdem, aber ohne Hinweis.',
     ),
     _PermissionInfo(
-      'Gerät wachhalten',
-      'WAKE_LOCK',
-      'Hält während einer Aufzeichnung die CPU wach, damit keine Positionen '
-          'verloren gehen. Wird bei der Installation automatisch erteilt und '
-          'nicht abgefragt.',
+      'Gerät wach halten',
+      'Während einer Aufzeichnung soll das Gerät nicht in den Tiefschlaf '
+          'fallen, damit keine Punkte deiner Strecke verloren gehen. Diese '
+          'Erlaubnis erteilt Android automatisch. Du musst nichts bestätigen.',
     ),
     _PermissionInfo(
       'Internet',
-      'INTERNET',
-      'Zum Laden der Kartenkacheln (OpenStreetMap und die weiteren wählbaren '
-          'Karten und Overlays) und für die Ortssuche. Bereits angezeigte '
-          'Kartenausschnitte werden zwischengespeichert und sind danach auch '
-          'ohne Netz sichtbar. Wird bei der Installation automatisch erteilt.',
+      'Für die Kartenbilder und die Ortssuche. Kartenausschnitte, die du '
+          'schon angesehen hast, merkt sich die App und zeigt sie auch ohne '
+          'Netz. Deine Strecken und Positionen bleiben auf deinem Gerät. Bei '
+          'den Kartenanbietern wird nur das gewünschte Kartengebiet abgefragt, '
+          'bei der Ortssuche der Suchbegriff.',
     ),
   ];
 
@@ -106,6 +107,29 @@ class _InfoPageState extends State<InfoPage> {
   // Konstruktor - Zugriff ausschließlich über die statische Instanz
   // DiagnosticLogService.instance, nicht mehr per DiagnosticLogService().
   final DiagnosticLogService _diagnosticLogService = DiagnosticLogService.instance;
+
+  /// Umrechnungsfaktoren für den Abschnitt "Umrechnungsfaktoren" (README
+  /// Abschnitt 69). Die Werte werden aus denselben Konstanten gebildet, mit
+  /// denen die App rechnet (SpeedUnit, TrackFormatter) - Anzeige und
+  /// Berechnung können so nicht auseinanderlaufen.
+  static List<(String, String)> _conversionRows() {
+    final factor = NumberFormat('0.#####', 'de_DE');
+    String perMs(SpeedUnit unit) => factor.format(unit.fromMetersPerSecond(1));
+    final nauticalMileMeters = TrackFormatter.metersPerNauticalMile;
+    return [
+      ('1 m/s', '= ${perMs(SpeedUnit.kilometersPerHour)} km/h'),
+      ('1 m/s', '= ${perMs(SpeedUnit.knots)} kn'),
+      ('1 m/s', '= ${perMs(SpeedUnit.milesPerHour)} mph'),
+      (
+        '1 Seemeile (sm)',
+        '= ${NumberFormat('0', 'de_DE').format(nauticalMileMeters)} m = '
+            '${factor.format(nauticalMileMeters / 1000)} km',
+      ),
+      ('1 Knoten (kn)', '= 1 sm pro Stunde'),
+      ('1 Meile (mi, für mph)', '= 1.609,344 m'),
+      ('1 Grad (°)', '= 60 Minuten (\') = 3600 Sekunden (")'),
+    ];
+  }
 
   PackageInfo? _packageInfo;
 
@@ -185,6 +209,48 @@ class _InfoPageState extends State<InfoPage> {
             const SizedBox(height: 24),
             const Divider(),
             const SizedBox(height: 16),
+            // NEU (README Abschnitt 70): Derselbe Hinweis wie beim ersten
+            // Start, hier jederzeit nachlesbar.
+            Card(
+              color: Theme.of(context).colorScheme.errorContainer,
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.warning_amber_rounded,
+                          color: Theme.of(context).colorScheme.onErrorContainer,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: AutoHyphenatingText(
+                            NavigationNotice.title,
+                            style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                                  color: Theme.of(context).colorScheme.onErrorContainer,
+                                ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    for (final paragraph in NavigationNotice.paragraphs)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 6),
+                        child: AutoHyphenatingText(
+                          paragraph,
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                color: Theme.of(context).colorScheme.onErrorContainer,
+                              ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
             ListTile(
               contentPadding: EdgeInsets.zero,
               leading: const Icon(Icons.person_outline),
@@ -227,33 +293,53 @@ class _InfoPageState extends State<InfoPage> {
             AutoHyphenatingText('Berechtigungen', style: Theme.of(context).textTheme.titleSmall),
             const SizedBox(height: 4),
             AutoHyphenatingText(
-              'Diese Berechtigungen verwendet onTour und aus diesen Gründen:',
+              'Diese Erlaubnisse braucht onTour und aus diesen Gründen:',
               style: Theme.of(context).textTheme.bodySmall,
             ),
             const SizedBox(height: 10),
             for (final permission in _permissions) ...[
               AutoHyphenatingText(permission.title, style: Theme.of(context).textTheme.labelLarge),
               const SizedBox(height: 2),
-              AutoHyphenatingText(
-                permission.technicalName,
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      fontStyle: FontStyle.italic,
-                    ),
-              ),
-              const SizedBox(height: 2),
               AutoHyphenatingText(permission.reason, style: Theme.of(context).textTheme.bodySmall),
               const SizedBox(height: 12),
             ],
             AutoHyphenatingText(
-              'Keine Berechtigung brauchen die Sensoren für Kompass '
-              '(Magnetfeld), Bewegungserkennung (Beschleunigung, Drehrate) und '
-              'Luftdruck sowie das Importieren und Teilen von GPX-Dateien (läuft '
-              'über die Systemdialoge). onTour betreibt keinen eigenen Server und '
-              'sendet keine Positionsdaten dorthin; beim Laden der Karte und bei '
-              'der Ortssuche werden aber Anfragen an die jeweiligen Kartendienste '
-              'gestellt (Kartenausschnitt bzw. Suchbegriff).',
+              'Keine Erlaubnis brauchen die Sensoren deines Geräts (Kompass, '
+              'Bewegung, Luftdruck) und das Speichern oder Teilen von Strecken '
+              'als Datei. Das läuft über die normalen Android-Fenster. onTour '
+              'greift nicht auf Kontakte, Fotos, Kamera, Mikrofon oder '
+              'Nachrichten zu.',
               style: Theme.of(context).textTheme.bodySmall,
             ),
+            const SizedBox(height: 24),
+            const Divider(),
+            const SizedBox(height: 16),
+            AutoHyphenatingText('Umrechnungsfaktoren', style: Theme.of(context).textTheme.titleSmall),
+            const SizedBox(height: 4),
+            AutoHyphenatingText(
+              'Alle Messwerte speichert onTour in Metern und Metern pro '
+              'Sekunde und rechnet sie erst für die Anzeige um - mit diesen '
+              'Faktoren:',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            const SizedBox(height: 10),
+            for (final row in _conversionRows())
+              Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      flex: 5,
+                      child: AutoHyphenatingText(row.$1, style: Theme.of(context).textTheme.bodyMedium),
+                    ),
+                    Expanded(
+                      flex: 6,
+                      child: AutoHyphenatingText(row.$2, style: Theme.of(context).textTheme.bodyMedium),
+                    ),
+                  ],
+                ),
+              ),
             // NEU (README Abschnitt 51): Kartenquellen und Lizenzen - u. a.
             // Voraussetzung der Lizenz der Reit- und Wanderkarte.
             const SizedBox(height: 24),

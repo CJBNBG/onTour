@@ -1,6 +1,6 @@
 import 'dart:convert';
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/map_style.dart';
@@ -28,6 +28,7 @@ class AppPreferences extends ChangeNotifier {
   static const _themeModeKey = 'themeMode';
   static const _speedUnitKey = 'speedUnit';
   static const _speedAccuracyModeKey = 'speedAccuracyMode';
+
   /// Nur noch zur einmaligen Übernahme alter Einstellungen (siehe [load],
   /// README Abschnitt 60) - Seemarken sind seither ein Wert von RouteOverlay.
   static const _legacyMapNauticalModeKey = 'mapNauticalMode';
@@ -43,6 +44,13 @@ class AppPreferences extends ChangeNotifier {
   static const _profileUnitKeyPrefix = 'profileUnit_';
   static const _profileSlotsKeyPrefix = 'profileSlots_';
   static const _startGridColumnsKey = 'startGridColumns';
+  static const _navigationNoticeVersionKey = 'navigationNoticeVersion';
+  static const _navigationNoticeAcceptedAtKey = 'navigationNoticeAcceptedAt';
+
+  /// Version des Hinweises "keine Navigation" (siehe README Abschnitt 70,
+  /// util/navigation_notice.dart). ERHÖHEN, wenn sich der Hinweis inhaltlich
+  /// wesentlich ändert - dann muss ihn jeder Nutzer erneut bestätigen.
+  static const int currentNavigationNoticeVersion = 1;
 
   ThemeMode _themeMode = ThemeMode.system;
   SpeedUnit _speedUnit = SpeedUnit.kilometersPerHour;
@@ -57,6 +65,8 @@ class AppPreferences extends ChangeNotifier {
   final Map<SpeedUnit, int> _speedScaleMax = {};
   UserProfile? _userProfile;
   StartGridColumns _startGridColumns = StartGridColumns.auto;
+  int _acceptedNavigationNoticeVersion = 0;
+  DateTime? _navigationNoticeAcceptedAt;
   final Map<UserProfile, SpeedUnit> _profileUnits = {};
   final Map<UserProfile, List<SlotType>> _slots = {};
 
@@ -87,14 +97,27 @@ class AppPreferences extends ChangeNotifier {
   /// solange noch keins gewählt wurde.
   UserProfile? get userProfile => _userProfile;
 
+  /// NEU (README Abschnitt 70): true, sobald der Nutzer den Hinweis "keine
+  /// Navigation" in der aktuellen Fassung ausdrücklich bestätigt hat. Solange
+  /// es false ist, zeigt HomeShell den Hinweis bei jedem Start erneut.
+  bool get navigationNoticeAccepted => _acceptedNavigationNoticeVersion >= currentNavigationNoticeVersion;
+
+  /// Zeitpunkt der Bestätigung (null, solange nicht bestätigt).
+  DateTime? get navigationNoticeAcceptedAt => _navigationNoticeAcceptedAt;
+
   /// NEU (README Abschnitt 57): Spaltenanzahl der Kacheln auf der
   /// Start-Seite (automatisch/1/2).
   StartGridColumns get startGridColumns => _startGridColumns;
 
+  /// NEU (README Abschnitt 68): true im Profil "Segler" - die Auswertung von
+  /// Tracks (Strecke, Tempo, Profil-Diagramme) erfolgt dann in Seemeilen (sm)
+  /// und Knoten (kn) statt in km und km/h. Gilt für den gerade gewählten
+  /// Stand, auch für zuvor in einem anderen Profil aufgezeichnete Tracks.
+  bool get nauticalTrackUnits => _userProfile == UserProfile.sailor;
+
   /// Belegung der Slots der Start-Seite für [profile] - die vom Nutzer
   /// angepasste Liste, sonst die Standardbelegung des Profils.
-  List<SlotType> slotsFor(UserProfile profile) =>
-      List.unmodifiable(_slots[profile] ?? profile.defaultSlots);
+  List<SlotType> slotsFor(UserProfile profile) => List.unmodifiable(_slots[profile] ?? profile.defaultSlots);
 
   /// Darstellung der Geschwindigkeit auf der Tacho-Seite (digital/analog).
   SpeedDisplayStyle get speedDisplayStyle => _speedDisplayStyle;
@@ -214,6 +237,12 @@ class AppPreferences extends ChangeNotifier {
       if (stored != null && SpeedScale.isValid(unit, stored)) {
         _speedScaleMax[unit] = stored;
       }
+    }
+
+    _acceptedNavigationNoticeVersion = prefs.getInt(_navigationNoticeVersionKey) ?? 0;
+    final storedNoticeAt = prefs.getString(_navigationNoticeAcceptedAtKey);
+    if (storedNoticeAt != null) {
+      _navigationNoticeAcceptedAt = DateTime.tryParse(storedNoticeAt);
     }
 
     final storedGridColumns = prefs.getString(_startGridColumnsKey);
@@ -336,6 +365,17 @@ class AppPreferences extends ChangeNotifier {
     );
   }
 
+  /// Hält fest, dass der Nutzer den Hinweis "keine Navigation" (aktuelle
+  /// Fassung) gelesen und verstanden hat - danach erscheint er nicht mehr.
+  Future<void> acceptNavigationNotice() async {
+    _acceptedNavigationNoticeVersion = currentNavigationNoticeVersion;
+    _navigationNoticeAcceptedAt = DateTime.now();
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_navigationNoticeVersionKey, currentNavigationNoticeVersion);
+    await prefs.setString(_navigationNoticeAcceptedAtKey, _navigationNoticeAcceptedAt!.toIso8601String());
+  }
+
   Future<void> setStartGridColumns(StartGridColumns columns) async {
     _startGridColumns = columns;
     notifyListeners();
@@ -356,8 +396,7 @@ class AppPreferences extends ChangeNotifier {
   bool isMapPresetActive(UserProfile profile) {
     final style = profile.mapStyle;
     if (style == null) return false;
-    return _mapStyle == style &&
-        _routeOverlay == (profile.routeOverlay ?? RouteOverlay.none);
+    return _mapStyle == style && _routeOverlay == (profile.routeOverlay ?? RouteOverlay.none);
   }
 
   /// Setzt Basiskarte, Routen-Overlay und Seemarken auf die Kartenvorwahl

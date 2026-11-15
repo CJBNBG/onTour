@@ -1,5 +1,5 @@
 import 'package:auto_hyphenating_text/auto_hyphenating_text.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 
@@ -63,10 +63,7 @@ class _TrackDetailPageState extends State<TrackDetailPage> with SingleTickerProv
   final TrackImportExportService _importExportService = TrackImportExportService();
   bool _mapReady = false;
 
-
-  late final List<LatLng> _points = widget.track.points
-      .map((p) => LatLng(p.latitude, p.longitude))
-      .toList();
+  late final List<LatLng> _points = widget.track.points.map((p) => LatLng(p.latitude, p.longitude)).toList();
 
   /// NEU (siehe README Abschnitt 29): Einmalig berechnet (der Track ist
   /// bereits abgeschlossen, seine Punkte ändern sich nicht mehr) - liefert
@@ -232,9 +229,7 @@ class _TrackDetailPageState extends State<TrackDetailPage> with SingleTickerProv
     final nauticalMode = widget.preferences.mapNauticalMode;
     // Legenden-Button links unten; bei dauerhaft sichtbarer Quellenangabe
     // (siehe MapStyle) oberhalb davon, damit er sie nicht verdeckt.
-    final legendBottom = !widget.preferences.mapStyle.alwaysVisibleAttribution
-        ? 12.0
-        : (nauticalMode || widget.preferences.routeOverlay.isActive ? 56.0 : 36.0);
+    final legendBottom = !widget.preferences.mapStyle.alwaysVisibleAttribution ? 12.0 : (nauticalMode || widget.preferences.routeOverlay.isActive ? 56.0 : 36.0);
 
     return Column(
       children: [
@@ -250,9 +245,7 @@ class _TrackDetailPageState extends State<TrackDetailPage> with SingleTickerProv
                   // die identische Logik in TrackPage/der frueheren
                   // eigenstaendigen Kartenseite.
                   interactionOptions: InteractionOptions(
-                    flags: _northLocked
-                        ? InteractiveFlag.all & ~InteractiveFlag.rotate
-                        : InteractiveFlag.all,
+                    flags: _northLocked ? InteractiveFlag.all & ~InteractiveFlag.rotate : InteractiveFlag.all,
                   ),
                   onMapReady: () {
                     _mapReady = true;
@@ -345,7 +338,10 @@ class _TrackDetailPageState extends State<TrackDetailPage> with SingleTickerProv
   Widget _buildDetailsTab(BuildContext context) {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
-      child: TrackProfileCharts(profile: _profile),
+      child: TrackProfileCharts(
+        profile: _profile,
+        nautical: widget.preferences.nauticalTrackUnits,
+      ),
     );
   }
 
@@ -364,7 +360,14 @@ class _TrackDetailPageState extends State<TrackDetailPage> with SingleTickerProv
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                _buildStat(context, 'Distanz', TrackFormatter.formatDistance(widget.track.distanceMeters)),
+                _buildStat(
+                  context,
+                  'Distanz',
+                  TrackFormatter.formatDistance(
+                    widget.track.distanceMeters,
+                    nautical: widget.preferences.nauticalTrackUnits,
+                  ),
+                ),
                 _buildStat(context, 'Dauer', TrackFormatter.formatDuration(widget.track.recordedDuration)),
                 _buildStat(
                   context,
@@ -372,6 +375,7 @@ class _TrackDetailPageState extends State<TrackDetailPage> with SingleTickerProv
                   TrackFormatter.formatAverageSpeed(
                     widget.track.distanceMeters,
                     widget.track.recordedDuration,
+                    nautical: widget.preferences.nauticalTrackUnits,
                   ),
                 ),
               ],

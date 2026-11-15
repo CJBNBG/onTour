@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:auto_hyphenating_text/auto_hyphenating_text.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:intl/intl.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
@@ -88,10 +88,10 @@ class _CompassPageState extends State<CompassPage> {
     // Anzeige erscheint (siehe [_declinationText]).
     unawaited(_compassService
         .updateDeclination(
-          latitude: reading.latitude,
-          longitude: reading.longitude,
-          altitude: reading.altitudeMeters,
-        )
+      latitude: reading.latitude,
+      longitude: reading.longitude,
+      altitude: reading.altitudeMeters,
+    )
         .then((_) {
       if (mounted) setState(() {});
     }));
@@ -288,10 +288,7 @@ class _CompassPageState extends State<CompassPage> {
                 builder: (context, constraints) {
                   const minDialSize = 120.0;
                   const maxDialSize = 600.0;
-                  final dialSize = math
-                      .min(constraints.maxWidth, constraints.maxHeight)
-                      .clamp(minDialSize, maxDialSize)
-                      .toDouble();
+                  final dialSize = math.min(constraints.maxWidth, constraints.maxHeight).clamp(minDialSize, maxDialSize).toDouble();
                   return Center(
                     child: SizedBox(
                       width: dialSize,

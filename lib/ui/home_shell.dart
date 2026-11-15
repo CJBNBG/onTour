@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 
 import '../services/app_preferences.dart';
@@ -8,6 +8,7 @@ import '../services/pressure_trend_service.dart';
 import '../services/track_recording_service.dart';
 import 'compass_page.dart';
 import 'info_page.dart';
+import 'navigation_notice_dialog.dart';
 import 'settings_page.dart';
 import 'speed_page.dart';
 import 'start_page.dart';
@@ -118,6 +119,15 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     // Deckt den Fall ab, dass die App durch Antippen der Erinnerungs-
     // Benachrichtigung frisch gestartet wurde (siehe Abschnitt 23).
     _checkPendingNavigation();
+    // NEU (README Abschnitt 70): Hinweis "keine Navigation" - erscheint nach
+    // dem ersten Aufbau der Oberfläche bei jedem Start, bis er bestätigt
+    // wurde.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _showNavigationNoticeIfNeeded());
+  }
+
+  Future<void> _showNavigationNoticeIfNeeded() async {
+    if (!mounted || widget.preferences.navigationNoticeAccepted) return;
+    await showNavigationNoticeDialog(context, widget.preferences);
   }
 
   @override

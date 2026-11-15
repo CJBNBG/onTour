@@ -1,6 +1,7 @@
 import 'package:auto_hyphenating_text/auto_hyphenating_text.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
+import '../../util/track_formatter.dart';
 import '../../util/track_profile_calculator.dart';
 import 'profile_chart.dart';
 
@@ -19,7 +20,11 @@ import 'profile_chart.dart';
 class TrackProfileCharts extends StatelessWidget {
   final List<TrackProfilePoint> profile;
 
-  const TrackProfileCharts({super.key, required this.profile});
+  /// NEU (README Abschnitt 68): true (Profil "Segler") = Distanz in sm und
+  /// Geschwindigkeit in kn statt km und km/h.
+  final bool nautical;
+
+  const TrackProfileCharts({super.key, required this.profile, this.nautical = false});
 
   @override
   Widget build(BuildContext context) {
@@ -36,7 +41,10 @@ class TrackProfileCharts extends StatelessWidget {
     }
 
     final scheme = Theme.of(context).colorScheme;
-    final distancesKm = [for (final p in profile) p.distanceMeters / 1000];
+    final distanceDivisor = nautical ? TrackFormatter.metersPerNauticalMile : 1000.0;
+    final distancesKm = [for (final p in profile) p.distanceMeters / distanceDivisor];
+    final speedFactor = nautical ? TrackFormatter.knotsPerMeterPerSecond : 3.6;
+    final distanceUnit = nautical ? 'sm' : 'km';
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -44,50 +52,50 @@ class TrackProfileCharts extends StatelessWidget {
         ProfileChart(
           title: 'Geschwindigkeitsprofil',
           color: scheme.primary,
-          unit: 'km/h',
+          unit: nautical ? 'kn' : 'km/h',
+          distanceUnit: distanceUnit,
           valueFormatter: (v) => v.toStringAsFixed(1),
           points: [
             for (var i = 0; i < profile.length; i++)
-              if (profile[i].speedMetersPerSecond != null)
-                Offset(distancesKm[i], profile[i].speedMetersPerSecond! * 3.6),
+              if (profile[i].speedMetersPerSecond != null) Offset(distancesKm[i], profile[i].speedMetersPerSecond! * speedFactor),
           ],
         ),
         const SizedBox(height: 28),
         ProfileChart(
           title: 'Höhenprofil',
+          distanceUnit: distanceUnit,
           color: scheme.secondary,
           unit: 'm ü. NN',
           valueFormatter: (v) => v.toStringAsFixed(0),
           points: [
             for (var i = 0; i < profile.length; i++)
-              if (profile[i].altitudeMeters != null)
-                Offset(distancesKm[i], profile[i].altitudeMeters!),
+              if (profile[i].altitudeMeters != null) Offset(distancesKm[i], profile[i].altitudeMeters!),
           ],
         ),
         const SizedBox(height: 28),
         ProfileChart(
           title: 'Anstiegsprofil (Höhenänderung seit Start)',
+          distanceUnit: distanceUnit,
           color: scheme.tertiary,
           unit: 'm',
           showZeroLine: true,
           valueFormatter: _formatSigned,
           points: [
             for (var i = 0; i < profile.length; i++)
-              if (profile[i].netAltitudeChangeMeters != null)
-                Offset(distancesKm[i], profile[i].netAltitudeChangeMeters!),
+              if (profile[i].netAltitudeChangeMeters != null) Offset(distancesKm[i], profile[i].netAltitudeChangeMeters!),
           ],
         ),
         const SizedBox(height: 28),
         ProfileChart(
           title: 'Steigung / Gefälle',
+          distanceUnit: distanceUnit,
           color: scheme.error,
           unit: '%',
           showZeroLine: true,
           valueFormatter: (v) => _formatSigned(v, decimals: 1),
           points: [
             for (var i = 0; i < profile.length; i++)
-              if (profile[i].gradientPercent != null)
-                Offset(distancesKm[i], profile[i].gradientPercent!),
+              if (profile[i].gradientPercent != null) Offset(distancesKm[i], profile[i].gradientPercent!),
           ],
         ),
       ],

@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:geolocator/geolocator.dart';
 
 /// Vom Nutzer in den Einstellungen wählbare Kombination aus GPS-Genauigkeit

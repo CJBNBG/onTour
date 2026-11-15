@@ -1,5 +1,5 @@
 import 'package:auto_hyphenating_text/auto_hyphenating_text.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:intl/intl.dart' as intl;
 
 /// Einfaches, selbst gezeichnetes Liniendiagramm mit gefüllter Fläche
@@ -16,7 +16,7 @@ import 'package:intl/intl.dart' as intl;
 class ProfileChart extends StatelessWidget {
   final String title;
 
-  /// Die darzustellenden Punkte - `dx` = Distanz in km (x-Achse, allen vier
+  /// Die darzustellenden Punkte - `dx` = Distanz in [distanceUnit] (x-Achse, allen vier
   /// Diagrammen gemeinsam, siehe TrackProfilePoint), `dy` = der jeweilige
   /// Messwert in der für dieses Diagramm gewählten Einheit. Punkte ohne
   /// verfügbaren Wert werden vom Aufrufer bereits vorab herausgefiltert
@@ -43,6 +43,11 @@ class ProfileChart extends StatelessWidget {
 
   final double height;
 
+  /// NEU (README Abschnitt 68): Einheit der x-Achse (Distanz) - "km"
+  /// oder (Profil "Segler") "sm". Die Werte in [points] (`dx`) müssen
+  /// bereits in dieser Einheit vorliegen.
+  final String distanceUnit;
+
   const ProfileChart({
     super.key,
     required this.title,
@@ -52,6 +57,7 @@ class ProfileChart extends StatelessWidget {
     required this.unit,
     this.showZeroLine = false,
     this.height = 150,
+    this.distanceUnit = 'km',
   });
 
   static final intl.NumberFormat _distanceFormat = intl.NumberFormat('0.0', 'de_DE');
@@ -85,6 +91,7 @@ class ProfileChart extends StatelessWidget {
                     unit: unit,
                     showZeroLine: showZeroLine,
                     distanceLabelFormat: _distanceFormat,
+                    distanceUnit: distanceUnit,
                   ),
                 ),
         ),
@@ -102,6 +109,7 @@ class _ProfileChartPainter extends CustomPainter {
   final String unit;
   final bool showZeroLine;
   final intl.NumberFormat distanceLabelFormat;
+  final String distanceUnit;
 
   _ProfileChartPainter({
     required this.points,
@@ -112,6 +120,7 @@ class _ProfileChartPainter extends CustomPainter {
     required this.unit,
     required this.showZeroLine,
     required this.distanceLabelFormat,
+    required this.distanceUnit,
   });
 
   /// Fester Platz links für die y-Achsen-Beschriftung (min-/max-Wert) -
@@ -241,14 +250,14 @@ class _ProfileChartPainter extends CustomPainter {
     final labelY = plotRect.bottom + _bottomLabelHeight / 2;
     _drawText(
       canvas,
-      '${distanceLabelFormat.format(minX)} km',
+      '${distanceLabelFormat.format(minX)} $distanceUnit',
       Offset(plotRect.left, labelY),
       alignRight: false,
       maxWidth: plotRect.width / 2,
     );
     _drawText(
       canvas,
-      '${distanceLabelFormat.format(maxX)} km',
+      '${distanceLabelFormat.format(maxX)} $distanceUnit',
       Offset(plotRect.right, labelY),
       alignRight: true,
       maxWidth: plotRect.width / 2,
