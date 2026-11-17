@@ -1,13 +1,13 @@
-[15.11.2026 13:18:53,71] Build gestartet in C:\EigeneProgramme\flutter\ontour\
-[15.11.2026 13:18:53,78] Version 1.0.0, Build 30, Ziel onTour-1.0.0-30.aab
-[15.11.2026 13:18:53,78] START: Flutter aktualisieren (flutter upgrade)
-[15.11.2026 13:18:56,20] gen-l10n uebersprungen (keine l10n.yaml)
-[15.11.2026 13:18:56,20] START: Projekt bereinigen (flutter clean)
-[15.11.2026 13:18:58,87] START: Paket-Cache reparieren (flutter pub cache repair)
-[15.11.2026 13:19:16,19] START: Pakete holen (flutter pub get)
-[15.11.2026 13:19:18,49] START: Pakete aktualisieren (flutter pub upgrade)
-[15.11.2026 13:19:21,02] START: Gradle bereinigen (gradlew clean)
-[15.11.2026 13:19:31,56] START: Gradle-Abhaengigkeiten neu laden (gradlew dependencies --refresh-dependencies)
-[15.11.2026 13:20:10,41] START: Gradle mit Configuration Cache (gradlew --configuration-cache)
-[15.11.2026 13:20:20,32] START: App Bundle bauen (flutter build appbundle --release)
-[15.11.2026 13:22:03,81] BUILD ERFOLGREICH: C:\EigeneProgramme\flutter\ontour\build\app\outputs\bundle\release\onTour-1.0.0-30.aab
+[17.11.2026 20:47:35,32] Build gestartet in C:\EigeneProgramme\flutter\ontour\
+[17.11.2026 20:47:35,39] Version 1.0.0, Build 31, Ziel onTour-1.0.0-31.aab
+[17.11.2026 20:47:35,39] START: Flutter aktualisieren (flutter upgrade)
+[17.11.2026 20:47:38,32] gen-l10n uebersprungen (keine l10n.yaml)
+[17.11.2026 20:47:38,33] START: Projekt bereinigen (flutter clean)
+[17.11.2026 20:47:40,07] START: Paket-Cache reparieren (flutter pub cache repair)
+[17.11.2026 20:48:12,37] START: Pakete holen (flutter pub get)
+[17.11.2026 20:48:15,06] START: Pakete aktualisieren (flutter pub upgrade)
+[17.11.2026 20:48:19,09] START: Gradle bereinigen (gradlew clean)
+[17.11.2026 20:48:26,60] START: Gradle-Abhaengigkeiten neu laden (gradlew dependencies --refresh-dependencies)
+[17.11.2026 20:49:32,85] START: Gradle mit Configuration Cache (gradlew --configuration-cache)
+[17.11.2026 20:49:39,49] START: App Bundle bauen (flutter build appbundle --release)
+[17.11.2026 20:51:03,11] BUILD ERFOLGREICH: C:\EigeneProgramme\flutter\ontour\build\app\outputs\bundle\release\onTour-1.0.0-31.aab

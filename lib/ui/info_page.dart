@@ -209,46 +209,47 @@ class _InfoPageState extends State<InfoPage> {
             const SizedBox(height: 24),
             const Divider(),
             const SizedBox(height: 16),
-            // NEU (README Abschnitt 70): Derselbe Hinweis wie beim ersten
-            // Start, hier jederzeit nachlesbar.
-            Card(
-              color: Theme.of(context).colorScheme.errorContainer,
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
+            // NEU (README Abschnitt 70/71): Derselbe Hinweis wie beim ersten
+            // Start, hier jederzeit nachlesbar - aus Platzgründen ein- und
+            // ausklappbar und beim Öffnen der Seite immer eingeklappt.
+            Builder(
+              builder: (context) {
+                final scheme = Theme.of(context).colorScheme;
+                return Card(
+                  color: scheme.errorContainer,
+                  clipBehavior: Clip.antiAlias,
+                  margin: EdgeInsets.zero,
+                  // Entfernt die Trennlinien, die ExpansionTile sonst ober-
+                  // und unterhalb des Inhalts zeichnet.
+                  child: Theme(
+                    data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+                    child: ExpansionTile(
+                      initiallyExpanded: false,
+                      iconColor: scheme.onErrorContainer,
+                      collapsedIconColor: scheme.onErrorContainer,
+                      textColor: scheme.onErrorContainer,
+                      collapsedTextColor: scheme.onErrorContainer,
+                      leading: Icon(Icons.warning_amber_rounded, color: scheme.onErrorContainer),
+                      // Bewusst normales Text-Widget (kurzer Einzeiler).
+                      title: const Text(NavigationNotice.title),
+                      childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                      expandedCrossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Icon(
-                          Icons.warning_amber_rounded,
-                          color: Theme.of(context).colorScheme.onErrorContainer,
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: AutoHyphenatingText(
-                            NavigationNotice.title,
-                            style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                                  color: Theme.of(context).colorScheme.onErrorContainer,
-                                ),
+                        for (final paragraph in NavigationNotice.paragraphs)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 6),
+                            child: AutoHyphenatingText(
+                              paragraph,
+                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                    color: scheme.onErrorContainer,
+                                  ),
+                            ),
                           ),
-                        ),
                       ],
                     ),
-                    const SizedBox(height: 8),
-                    for (final paragraph in NavigationNotice.paragraphs)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 6),
-                        child: AutoHyphenatingText(
-                          paragraph,
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                color: Theme.of(context).colorScheme.onErrorContainer,
-                              ),
-                        ),
-                      ),
-                  ],
-                ),
-              ),
+                  ),
+                );
+              },
             ),
             const SizedBox(height: 16),
             ListTile(

@@ -3447,3 +3447,15 @@ Store-Beschreibung.
 **Betroffene/neue Dateien:** `lib/util/navigation_notice.dart` (NEU),
 `lib/ui/navigation_notice_dialog.dart` (NEU), `lib/services/app_preferences.dart`,
 `lib/ui/home_shell.dart`, `lib/ui/info_page.dart`.
+
+## 71. Info-Seite: Hinweis "keine Navigation" ein- und ausklappbar
+
+Der Hinweiskasten ganz oben auf der Info-Seite (Abschnitt 70) ist jetzt ein
+`ExpansionTile`: Zu sehen ist nur die Überschrift "Wichtiger Hinweis: keine
+Navigation" mit Warn-Symbol und Pfeil, Antippen klappt den vollständigen Text
+auf bzw. wieder zu. Beim Öffnen der Seite ist er immer eingeklappt
+(`initiallyExpanded: false`; der Zustand wird nicht gespeichert). Der
+Wortlaut bleibt zentral in `util/navigation_notice.dart`, der Dialog beim
+Start (Abschnitt 70) ist unverändert und immer vollständig sichtbar.
+
+**Betroffene Dateien:** `lib/ui/info_page.dart`.
