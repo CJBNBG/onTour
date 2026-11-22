@@ -76,6 +76,24 @@ enum RouteOverlay {
       'Bojen, Leuchttürme und Fahrwassermarkierungen über der Karte - keine '
           'amtliche Seekarte, keine Tiefenangaben.',
     ],
+  ),
+  camping(
+    label: 'Camping und Stellplätze',
+    description: 'Campingplätze und Wohnmobil-Stellplätze als antippbare '
+        'Marker ab Zoomstufe 9, optional auch einfache Zeltplätze.',
+    attributions: [
+      MapAttribution(
+        'Camping: OpenCampingMap, © OpenStreetMap-Mitwirkende',
+        'https://opencampingmap.org',
+      ),
+    ],
+    creditsLine: 'Camping- und Stellplatzdaten: OpenCampingMap '
+        '(opencampingmap.org, Sven Geggus). Daten: © OpenStreetMap-Mitwirkende (ODbL).',
+    usageNote: 'Die Daten sind fest in der App enthalten und können veraltet '
+        'oder unvollständig sein. Fehlende Angaben lassen sich in '
+        'OpenStreetMap nachtragen.',
+    infoUrl: 'https://opencampingmap.org',
+    legendUrl: 'https://opencampingmap.org',
   );
 
   final String label;
@@ -111,5 +129,5 @@ enum RouteOverlay {
     this.legendHints = const [],
   });
 
-  bool get isActive => urlTemplate != null;
+  bool get isActive => this != RouteOverlay.none;
 }

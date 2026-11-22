@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:auto_hyphenating_text/auto_hyphenating_text.dart';
@@ -12,9 +13,12 @@ import '../services/app_preferences.dart';
 import '../services/device_status_service.dart';
 import '../services/live_data_service.dart';
 import '../services/pressure_trend_service.dart';
+import '../services/step_counter_service.dart';
 import '../services/track_recording_service.dart';
 import '../util/coordinate_formatter.dart';
 import '../util/speed_formatter.dart';
+import '../util/track_formatter.dart';
+import '../models/step_count_mode.dart';
 import 'widgets/compass_dial.dart';
 import 'widgets/recording_indicator.dart';
 
@@ -46,6 +50,9 @@ class StartPage extends StatefulWidget {
   final DeviceStatusService status;
   final PressureTrendService pressureService;
 
+  /// NEU (README Abschnitt 72): Schrittzähler für die Schritte-Kachel.
+  final StepCounterService stepService;
+
   /// Für den Aufzeichnungs-Indikator unten in der Profil-Leiste (siehe
   /// [RecordingIndicator], README Abschnitt 64).
   final TrackRecordingService recordingService;
@@ -58,6 +65,7 @@ class StartPage extends StatefulWidget {
     required this.preferences,
     required this.status,
     required this.pressureService,
+    required this.stepService,
     required this.recordingService,
     required this.onOpenTab,
   });
@@ -84,6 +92,7 @@ class _StartPageState extends State<StartPage> {
   late final LiveDataService _live = LiveDataService(
     status: widget.status,
     pressureService: widget.pressureService,
+    stepService: widget.stepService,
     accuracyMode: widget.preferences.speedAccuracyMode,
   );
 
@@ -362,6 +371,8 @@ class _StartPageState extends State<StartPage> {
     switch (slot) {
       case SlotType.speed:
         return _buildSpeedTile(context, compact);
+      case SlotType.steps:
+        return _buildStepsTile(context, compact);
       case SlotType.course:
         return _buildCourseTile(context, compact);
       case SlotType.altitude:
@@ -737,6 +748,95 @@ class _StartPageState extends State<StartPage> {
       tooltip = 'In Bewegung';
     }
     return Tooltip(message: tooltip, child: Icon(icon, size: 22, color: color));
+  }
+
+  /// Schritte-Kachel (README Abschnitt 72). Zählweise je nach Einstellung:
+  /// ganztägig (Tageszahl, bei laufender Aufzeichnung deren Schritte in der
+  /// Zeile darunter) oder nur während einer Aufzeichnung.
+  Widget _buildStepsTile(BuildContext context, bool compact) {
+    final steps = widget.stepService;
+    final state = steps.state;
+
+    if (state == StepSensorState.unavailable) {
+      return _valueTile(
+        context,
+        slot: SlotType.steps,
+        compact: compact,
+        value: '-',
+        subtitle: 'Kein Schrittsensor im Gerät',
+      );
+    }
+    if (state == StepSensorState.permissionDenied || state == StepSensorState.permissionDeniedForever) {
+      return _valueTile(
+        context,
+        slot: SlotType.steps,
+        compact: compact,
+        value: '-',
+        subtitle: state == StepSensorState.permissionDeniedForever ? 'Antippen: in den App-Einstellungen erlauben' : 'Antippen: Zugriff auf Bewegung erlauben',
+        onTap: () => unawaited(steps.requestPermission()),
+      );
+    }
+    if (state == StepSensorState.checking) {
+      return _valueTile(
+        context,
+        slot: SlotType.steps,
+        compact: compact,
+        value: '…',
+        subtitle: 'wird ermittelt',
+      );
+    }
+
+    String fmt(int? v) => v == null ? '…' : TrackFormatter.formatSteps(v);
+    final session = steps.sessionSteps;
+
+    if (widget.preferences.stepCountMode == StepCountMode.recording) {
+      if (!steps.sessionActive) {
+        return _valueTile(
+          context,
+          slot: SlotType.steps,
+          compact: compact,
+          value: '-',
+          subtitle: 'Zählt nur während einer Aufzeichnung',
+          onTap: _showStepDebug,
+        );
+      }
+      return _valueTile(
+        context,
+        slot: SlotType.steps,
+        compact: compact,
+        value: fmt(session),
+        subtitle: 'Seit Start der Aufzeichnung',
+        onTap: _showStepDebug,
+      );
+    }
+
+    final String note;
+    switch (steps.todayBaselineKind) {
+      case StepBaselineKind.midnight:
+        note = 'Heute';
+      case StepBaselineKind.sinceBoot:
+        note = 'Heute (seit Neustart des Geräts)';
+      case StepBaselineKind.firstReading:
+        note = 'Heute (ab erster Messung)';
+      case null:
+        note = 'wird ermittelt';
+    }
+    return _valueTile(
+      context,
+      slot: SlotType.steps,
+      compact: compact,
+      value: fmt(steps.stepsToday),
+      subtitle: session != null ? 'Aufzeichnung: ${TrackFormatter.formatSteps(session)}' : note,
+      onTap: _showStepDebug,
+    );
+  }
+
+  /// Diagnose für die Fehlersuche: Antippen der Schritte-Kachel zeigt, welche
+  /// Sensor-Meldungen angekommen sind.
+  void _showStepDebug() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(widget.stepService.debugSummary), duration: const Duration(seconds: 12)),
+    );
   }
 
   Widget _buildCourseTile(BuildContext context, bool compact) {

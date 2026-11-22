@@ -28,6 +28,7 @@ import 'widgets/map_style_button.dart';
 import 'widgets/north_lock_button.dart';
 import 'widgets/place_search_sheet.dart';
 import 'widgets/track_profile_charts.dart';
+import 'widgets/camping_marker_layer.dart';
 
 /// Ergebnis des "Aufzeichnung beenden"-Dialogs (siehe _handleStop).
 enum _StopDialogAction { cancel, discard, save }
@@ -710,6 +711,13 @@ class _TrackPageState extends State<TrackPage> with SingleTickerProviderStateMix
                     ),
                   ],
                 ),
+              if (widget.preferences.campingEnabled)
+                CampingMarkerLayer(
+                  includeBackcountry: widget.preferences.campingBackcountry,
+                  onSetDestination: (site) => unawaited(
+                    _setDestination(site.toPlaceResult(), showOnMap: false),
+                  ),
+                ),
               ..._buildDestinationLayers(context),
               MarkerLayer(
                 markers: [
@@ -863,6 +871,7 @@ class _TrackPageState extends State<TrackPage> with SingleTickerProviderStateMix
   Widget _buildMomentaryValuesCard(BuildContext context, TrackProfilePoint latest) {
     final headingDegrees = widget.recordingService.currentHeadingDegrees;
     final speedMs = latest.speedMetersPerSecond;
+    final steps = widget.recordingService.stepsDuringRecording;
     final nautical = widget.preferences.nauticalTrackUnits;
 
     return Card(
@@ -914,6 +923,17 @@ class _TrackPageState extends State<TrackPage> with SingleTickerProviderStateMix
                 ),
               ],
             ),
+            if (steps != null) ...[
+              const SizedBox(height: 20),
+              Row(
+                children: [
+                  Expanded(
+                    child: _buildMomentaryStat(context, 'Schritte', TrackFormatter.formatSteps(steps)),
+                  ),
+                  const Expanded(child: SizedBox.shrink()),
+                ],
+              ),
+            ],
           ],
         ),
       ),

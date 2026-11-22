@@ -48,7 +48,7 @@ List<Widget> buildMapTileLayers({
   final overlayUrl = routeOverlay.urlTemplate;
   final attributions = <MapAttribution>[
     ...mapStyle.attributions,
-    if (overlayUrl != null) ...routeOverlay.attributions,
+    if (routeOverlay.isActive) ...routeOverlay.attributions,
   ];
 
   return [

@@ -10,10 +10,22 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // Anforderung: Es wird nur das Hochkantformat genutzt.
-  await SystemChrome.setPreferredOrientations([
-    DeviceOrientation.portraitUp,
-    DeviceOrientation.portraitDown,
-  ]);
+  //
+  // WICHTIG (README Abschnitt 73): Bewusst in try/catch. main() läuft dank der
+  // persistenten Engine schon beim Prozessstart - auch dann, wenn Android den
+  // Prozess ohne Activity startet (Alarm, Boot-/Update-Receiver). Ohne
+  // Activity gibt es keinen Handler für diesen Aufruf, er wirft dann eine
+  // MissingPluginException; ohne try/catch bräche main() vor runApp() ab und
+  // die App bliebe später am Launcher-Icon hängen. Die Hochkant-Sperre steht
+  // ohnehin zusätzlich im Manifest (screenOrientation="portrait").
+  try {
+    await SystemChrome.setPreferredOrientations([
+      DeviceOrientation.portraitUp,
+      DeviceOrientation.portraitDown,
+    ]);
+  } catch (_) {
+    // Siehe oben - ohne Activity wirkungslos, aber unschädlich.
+  }
 
   // Lädt die Trennmuster für die automatische Silbentrennung (deutsche
   // Rechtschreibung nach der Reform von 1996) - wird von AutoHyphenatingText

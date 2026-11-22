@@ -1,6 +1,7 @@
 import 'package:auto_hyphenating_text/auto_hyphenating_text.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:intl/intl.dart' show NumberFormat;
+import 'package:ontour/services/camping_data_service.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -67,6 +68,18 @@ class _InfoPageState extends State<InfoPage> {
       'Während einer Aufzeichnung soll das Gerät nicht in den Tiefschlaf '
           'fallen, damit keine Punkte deiner Strecke verloren gehen. Diese '
           'Erlaubnis erteilt Android automatisch. Du musst nichts bestätigen.',
+    ),
+    _PermissionInfo(
+      'Körperliche Aktivität (Schritte)',
+      'Für den Schrittzähler. Android zählt die Schritte über einen eigenen '
+          'Sensor und verlangt dafür diese Erlaubnis. onTour fragt erst, wenn '
+          'die Kachel "Schritte" auf der Start-Seite angetippt wird. Ohne die '
+          'Erlaubnis gibt es keine Schrittzahl, auch nicht in einer Track-Aufzeichnung. '
+          'Damit die Tageszahl stimmt, merkt sich onTour um Mitternacht kurz '
+          'den Zählerstand und setzt dafür nach einem Neustart des Geräts '
+          'einen Zeitgeber neu. Außer dass sie mit einer Trackaufzeichnung '
+          'exportiert werden kann, bleibt die ermittelte Anzahl Schritte '
+          'auf deinem Gerät.',
     ),
     _PermissionInfo(
       'Internet',
@@ -362,6 +375,11 @@ class _InfoPageState extends State<InfoPage> {
             const SizedBox(height: 10),
             AutoHyphenatingText(
               'Seemarken (optionales Overlay): © OpenSeaMap-Mitwirkende.',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            const SizedBox(height: 10),
+            AutoHyphenatingText(
+              'Camping- und Stellplatzdaten: OpenCampingMap (opencampingmap.org, Sven Geggus), Daten © OpenStreetMap-Mitwirkende (ODbL), Stand: ${CampingDataService.instance.dataDateText}.',
               style: Theme.of(context).textTheme.bodySmall,
             ),
             // NEU (siehe README Abschnitt 31): Nur sichtbar, wenn

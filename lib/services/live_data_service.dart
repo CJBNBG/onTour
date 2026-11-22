@@ -13,6 +13,7 @@ import 'barometer_altitude_service.dart';
 import 'compass_service.dart';
 import 'device_status_service.dart';
 import 'pressure_trend_service.dart';
+import 'step_counter_service.dart';
 
 /// Zustand der Standortfreigabe für die Start-Seite.
 enum LiveLocationState {
@@ -60,11 +61,13 @@ class LiveDataService extends ChangeNotifier {
   final DeviceStatusService status;
   final PressureTrendService pressureService;
   final SpeedAccuracyMode accuracyMode;
+  final StepCounterService stepService;
 
   LiveDataService({
     required this.status,
     required this.pressureService,
     required this.accuracyMode,
+    required this.stepService,
   }) {
     status.addListener(_scheduleNotify);
   }
@@ -114,6 +117,10 @@ class LiveDataService extends ChangeNotifier {
 
   // ==== Luftdruck ====
   StreamSubscription<void>? _pressureSubscription;
+
+  // ==== Schritte (README Abschnitt 72) ====
+  bool _stepsAcquired = false;
+  StreamSubscription<void>? _stepsSubscription;
 
   // ==== Öffentliche Sicht ====
 
@@ -215,6 +222,24 @@ class LiveDataService extends ChangeNotifier {
       _pressureSubscription?.cancel();
       _pressureSubscription = null;
     }
+
+    if (slots.contains(SlotType.steps)) {
+      if (!_stepsAcquired) {
+        _stepsAcquired = true;
+        stepService.acquire();
+        _stepsSubscription = stepService.updates.listen((_) => _scheduleNotify());
+      }
+    } else {
+      _releaseSteps();
+    }
+  }
+
+  void _releaseSteps() {
+    if (!_stepsAcquired) return;
+    _stepsAcquired = false;
+    _stepsSubscription?.cancel();
+    _stepsSubscription = null;
+    stepService.release();
   }
 
   // ==== GPS ====
@@ -435,6 +460,7 @@ class LiveDataService extends ChangeNotifier {
     _stopBarometer();
     _stopCompass();
     _pressureSubscription?.cancel();
+    _releaseSteps();
     compassHeading.dispose();
     super.dispose();
   }

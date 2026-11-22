@@ -10,10 +10,12 @@ import '../models/speed_accuracy_mode.dart';
 import '../models/speed_scale.dart';
 import '../models/speed_unit.dart';
 import '../models/start_grid_columns.dart';
+import '../models/step_count_mode.dart';
 import '../models/user_profile.dart';
 import '../services/app_preferences.dart';
 import '../util/external_link.dart';
 import 'widgets/stacked_segment_label.dart';
+import 'widgets/camping_data_section.dart';
 
 /// Einstellungsseite, unterteilt in Unterreiter (siehe README Abschnitt
 /// 24, seit Abschnitt 57 vier):
@@ -258,6 +260,29 @@ class _SettingsPageState extends State<SettingsPage> with SingleTickerProviderSt
         const SizedBox(height: 8),
         AutoHyphenatingText(prefs.startGridColumns.description, style: theme.textTheme.bodySmall),
         const SizedBox(height: 32),
+        AutoHyphenatingText('Schrittzähler', style: theme.textTheme.titleMedium),
+        const SizedBox(height: 8),
+        SizedBox(
+          width: double.infinity,
+          child: SegmentedButton<StepCountMode>(
+            segments: const [
+              ButtonSegment(
+                value: StepCountMode.allDay,
+                label: StackedSegmentLabel(icon: Icons.today, text: 'Ganztägig'),
+              ),
+              ButtonSegment(
+                value: StepCountMode.recording,
+                label: StackedSegmentLabel(icon: Icons.route, text: 'Nur Aufzeichnung'),
+              ),
+            ],
+            showSelectedIcon: false,
+            selected: {prefs.stepCountMode},
+            onSelectionChanged: (selection) => prefs.setStepCountMode(selection.first),
+          ),
+        ),
+        const SizedBox(height: 8),
+        AutoHyphenatingText(prefs.stepCountMode.description, style: theme.textTheme.bodySmall),
+        const SizedBox(height: 32),
         AutoHyphenatingText('Anzeigen der Start-Seite', style: theme.textTheme.titleMedium),
         const SizedBox(height: 8),
         AutoHyphenatingText(
@@ -497,6 +522,22 @@ class _SettingsPageState extends State<SettingsPage> with SingleTickerProviderSt
             ],
           ),
         ),
+        if (widget.preferences.campingEnabled)
+          Padding(
+            padding: const EdgeInsets.only(left: 40),
+            child: SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              dense: true,
+              title: const Text('Wildcampen einbeziehen'),
+              subtitle: const Text('Einfache Zeltplätze ohne Ausstattung'),
+              value: widget.preferences.campingBackcountry,
+              onChanged: widget.preferences.setCampingBackcountry,
+            ),
+          ),
+        if (widget.preferences.campingEnabled) ...[
+          const SizedBox(height: 16),
+          CampingDataSection(preferences: widget.preferences),
+        ],
         const SizedBox(height: 32),
         AutoHyphenatingText('Quellen und Nutzungshinweise', style: theme.textTheme.titleMedium),
         for (final style in MapStyle.values)

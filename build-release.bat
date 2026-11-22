@@ -18,7 +18,7 @@ rem  Protokoll der Schritte: build-log.txt (wird bei jedem Lauf neu angelegt)
 rem ====================================================================
 
 rem ---------- Einstellungen (1 = ausfuehren, 0 = ueberspringen) ----------
-set "DO_FLUTTER_UPGRADE=1"
+set "DO_FLUTTER_UPGRADE=0"
 set "DO_PUB_CACHE_REPAIR=1"
 set "DO_PUB_UPGRADE=1"
 set "DO_GRADLE_REFRESH=1"

@@ -9,10 +9,11 @@ import 'speed_unit.dart';
 /// dieser Bausteine - dieselbe Liste dient später auch dem frei
 /// wählbaren Profil "Eigene" und dem Einstellungsbereich zur Anpassung.
 ///
-/// "Schritte" (Schrittzähler) fehlt bewusst noch: Er braucht die
-/// zusätzliche Berechtigung ACTIVITY_RECOGNITION (siehe README).
+/// "Schritte" (Schrittzähler, README Abschnitt 72) braucht die zusätzliche
+/// Berechtigung ACTIVITY_RECOGNITION.
 enum SlotType {
   speed(label: 'Tempo', icon: Icons.speed),
+  steps(label: 'Schritte', icon: Icons.directions_walk),
   course(label: 'Kurs über Grund', icon: Icons.navigation),
   altitude(label: 'Höhe', icon: Icons.terrain),
   pressure(label: 'Luftdruck', icon: Icons.compress),
@@ -39,6 +40,7 @@ enum UserProfile {
     defaultUnit: SpeedUnit.metersPerSecond,
     defaultSlots: [
       SlotType.compass,
+      SlotType.steps,
       SlotType.altitude,
       SlotType.pressure,
       SlotType.position,
@@ -100,6 +102,7 @@ enum UserProfile {
       SlotType.mapPreset,
     ],
     mapStyle: MapStyle.topPlusOpen,
+    routeOverlay: RouteOverlay.camping,
   ),
 
   /// Für alle, die sich in keiner Kategorie wiederfinden - Kartenvorwahl

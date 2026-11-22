@@ -67,6 +67,11 @@ class TrackFormatter {
     return '${_oneDecimal.format(value)} ${nautical ? 'kn' : 'km/h'}';
   }
 
+  static final NumberFormat _thousands = NumberFormat('#,##0', 'de_DE');
+
+  /// Schrittzahl mit Tausenderpunkt, z. B. "12.345".
+  static String formatSteps(int steps) => _thousands.format(steps);
+
   static String formatDateTime(DateTime dateTime) =>
       _dateTimeFormat.format(dateTime);
 

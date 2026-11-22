@@ -378,6 +378,7 @@ class _TrackDetailPageState extends State<TrackDetailPage> with SingleTickerProv
                     nautical: widget.preferences.nauticalTrackUnits,
                   ),
                 ),
+                if (widget.track.steps != null) _buildStat(context, 'Schritte', TrackFormatter.formatSteps(widget.track.steps!)),
               ],
             ),
           ],

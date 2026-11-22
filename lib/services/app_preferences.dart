@@ -12,6 +12,7 @@ import '../models/speed_display_style.dart';
 import '../models/speed_scale.dart';
 import '../models/speed_unit.dart';
 import '../models/start_grid_columns.dart';
+import '../models/step_count_mode.dart';
 import '../models/user_profile.dart';
 import 'altitude_correction.dart';
 
@@ -44,6 +45,7 @@ class AppPreferences extends ChangeNotifier {
   static const _profileUnitKeyPrefix = 'profileUnit_';
   static const _profileSlotsKeyPrefix = 'profileSlots_';
   static const _startGridColumnsKey = 'startGridColumns';
+  static const _stepCountModeKey = 'stepCountMode';
   static const _navigationNoticeVersionKey = 'navigationNoticeVersion';
   static const _navigationNoticeAcceptedAtKey = 'navigationNoticeAcceptedAt';
 
@@ -65,6 +67,7 @@ class AppPreferences extends ChangeNotifier {
   final Map<SpeedUnit, int> _speedScaleMax = {};
   UserProfile? _userProfile;
   StartGridColumns _startGridColumns = StartGridColumns.auto;
+  StepCountMode _stepCountMode = StepCountMode.allDay;
   int _acceptedNavigationNoticeVersion = 0;
   DateTime? _navigationNoticeAcceptedAt;
   final Map<UserProfile, SpeedUnit> _profileUnits = {};
@@ -108,6 +111,10 @@ class AppPreferences extends ChangeNotifier {
   /// NEU (README Abschnitt 57): Spaltenanzahl der Kacheln auf der
   /// Start-Seite (automatisch/1/2).
   StartGridColumns get startGridColumns => _startGridColumns;
+
+  /// NEU (README Abschnitt 72): Zählweise des Schrittzählers (ganztägig oder
+  /// nur während einer Track-Aufzeichnung). Standard: ganztägig.
+  StepCountMode get stepCountMode => _stepCountMode;
 
   /// NEU (README Abschnitt 68): true im Profil "Segler" - die Auswertung von
   /// Tracks (Strecke, Tempo, Profil-Diagramme) erfolgt dann in Seemeilen (sm)
@@ -252,6 +259,13 @@ class AppPreferences extends ChangeNotifier {
       }
     }
 
+    final storedStepMode = prefs.getString(_stepCountModeKey);
+    if (storedStepMode != null) {
+      for (final mode in StepCountMode.values) {
+        if (mode.name == storedStepMode) _stepCountMode = mode;
+      }
+    }
+
     final storedProfile = prefs.getString(_userProfileKey);
     if (storedProfile != null) {
       for (final profile in UserProfile.values) {
@@ -283,6 +297,11 @@ class AppPreferences extends ChangeNotifier {
     }
     AltitudeCorrection.instance.manualOffsetMeters = _altitudeManualOffsetMeters;
 
+    _campingBackcountry = prefs.getBool(_campingBackcountryKey) ?? false;
+    final storedCampingUpdate = prefs.getString(_campingLastUpdateKey);
+    if (storedCampingUpdate != null) {
+      _campingLastUpdateAt = DateTime.tryParse(storedCampingUpdate);
+    }
     notifyListeners();
   }
 
@@ -383,6 +402,13 @@ class AppPreferences extends ChangeNotifier {
     await prefs.setString(_startGridColumnsKey, columns.name);
   }
 
+  Future<void> setStepCountMode(StepCountMode mode) async {
+    _stepCountMode = mode;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_stepCountModeKey, mode.name);
+  }
+
   /// Stellt die Standardbelegung eines Profils wieder her.
   Future<void> resetSlotsFor(UserProfile profile) async {
     _slots.remove(profile);
@@ -467,5 +493,33 @@ class AppPreferences extends ChangeNotifier {
     } else {
       await prefs.setString(_destinationKey, jsonEncode(place.toJson()));
     }
+  }
+
+  // Schlüssel
+  static const _campingBackcountryKey = 'campingBackcountry';
+  static const _campingLastUpdateKey = 'campingLastUpdateAt';
+
+// Felder
+  bool _campingBackcountry = false;
+  DateTime? _campingLastUpdateAt;
+
+// Getter
+  bool get campingEnabled => _routeOverlay == RouteOverlay.camping;
+  bool get campingBackcountry => _campingBackcountry;
+  DateTime? get campingLastUpdateAt => _campingLastUpdateAt;
+
+// Setter
+  Future<void> setCampingBackcountry(bool value) async {
+    _campingBackcountry = value;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_campingBackcountryKey, value);
+  }
+
+  Future<void> setCampingLastUpdateAt(DateTime value) async {
+    _campingLastUpdateAt = value;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_campingLastUpdateKey, value.toIso8601String());
   }
 }

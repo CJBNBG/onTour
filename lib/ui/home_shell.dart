@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 
 import '../services/app_preferences.dart';
 import '../services/pressure_trend_service.dart';
+import '../services/step_counter_service.dart';
 import '../services/track_recording_service.dart';
 import 'compass_page.dart';
 import 'info_page.dart';
@@ -102,6 +103,10 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
   /// jedem Seitenwechsel sonst verloren ginge.
   final PressureTrendService _pressureTrendService = PressureTrendService();
 
+  /// NEU (README Abschnitt 72): Schrittzähler - lebt wie der Luftdruck-Dienst
+  /// über alle Seiten hinweg.
+  final StepCounterService _stepCounterService = StepCounterService();
+
   static const _titles = ['Start', 'Tacho', 'Kompass', 'Track', 'Einstellungen'];
 
   /// Siehe Klassenkommentar (Abschnitt 23) - Methodenname auf nativer
@@ -116,6 +121,8 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     // NEU (README Abschnitt 47): Startet die fortlaufende Luftdruck-
     // Aufzeichnung (lädt zuvor einen ggf. gesicherten Verlauf).
     unawaited(_pressureTrendService.start());
+    _trackRecordingService.stepCounter = _stepCounterService;
+    unawaited(_stepCounterService.init());
     // Deckt den Fall ab, dass die App durch Antippen der Erinnerungs-
     // Benachrichtigung frisch gestartet wurde (siehe Abschnitt 23).
     _checkPendingNavigation();
@@ -137,6 +144,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     // wurde - HomeShell.initState läuft in diesem Fall NICHT erneut,
     // wohl aber dieser Lifecycle-Callback.
     if (state == AppLifecycleState.resumed) {
+      unawaited(_stepCounterService.refreshPermission());
       _checkPendingNavigation();
     }
   }
@@ -163,6 +171,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     // endgueltig geschlossen werden - siehe TrackRecordingService.dispose.
     unawaited(_trackRecordingService.dispose());
     unawaited(_pressureTrendService.dispose());
+    unawaited(_stepCounterService.dispose());
     _deviceStatus.dispose();
     _trackFullscreen.dispose();
     super.dispose();
@@ -254,6 +263,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
           preferences: widget.preferences,
           status: _deviceStatus,
           pressureService: _pressureTrendService,
+          stepService: _stepCounterService,
           recordingService: _trackRecordingService,
           // Kachel antippen -> zugehörige Vollansicht.
           onOpenTab: (tab) => setState(() => _selectedIndex = tab),

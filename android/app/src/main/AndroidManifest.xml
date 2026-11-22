@@ -25,6 +25,12 @@
          automatisch bei der Installation gewährt, keine Laufzeit-Abfrage
          nötig. -->
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
+    <!-- NEU (Abschnitt 72): Schrittzähler. ACTIVITY_RECOGNITION ist ab
+         Android 10 eine Laufzeit-Berechtigung (Abfrage per permission_handler
+         erst auf Wunsch des Nutzers). RECEIVE_BOOT_COMPLETED: plant den
+         Mitternachts-Alarm nach einem Neustart neu (normale Berechtigung). -->
+    <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION"/>
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
     <!-- ==== Anwendung ====
          android:name=".OnTourApplication" - NEU (Abschnitt 21): eigene
          Application-Klasse, die schon beim Start des Android-Prozesses
@@ -85,6 +91,18 @@
         <receiver
             android:name=".AutoPauseReminderReceiver"
             android:exported="false" />
+        <!-- NEU (Abschnitt 72): Mitternachts-Snapshot des Schrittzählers. -->
+        <receiver
+            android:name=".StepMidnightReceiver"
+            android:exported="false" />
+        <receiver
+            android:name=".StepBootReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED"/>
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED"/>
+            </intent-filter>
+        </receiver>
     </application>
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and

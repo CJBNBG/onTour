@@ -13,6 +13,7 @@ import 'altitude_correction.dart';
 import 'barometer_altitude_service.dart';
 import 'diagnostic_log_service.dart';
 import 'motion_service.dart';
+import 'step_counter_service.dart';
 
 /// Zustände, die eine Track-Aufzeichnung durchlaufen kann.
 enum RecordingState {
@@ -112,6 +113,14 @@ class TrackRecordingService {
   /// (siehe [stop]/[discard]) - Grundlage für [_minRestartGap]. null vor
   /// der allerersten Aufzeichnung dieser Service-Instanz.
   DateTime? _lastStoppedAt;
+
+  /// NEU (README Abschnitt 72): Schrittzähler, von HomeShell gesetzt. Zählt
+  /// die Schritte der Aufzeichnung (manuelle Pausen ausgenommen, automatische
+  /// Stillstands-Pausen zählen mit). null = keine Schrittzählung.
+  StepCounterService? stepCounter;
+
+  /// Schritte der laufenden Aufzeichnung - null ohne Zählung.
+  int? get stepsDuringRecording => stepCounter?.sessionSteps;
 
   /// NEU (siehe README Abschnitt 22): Kanal zu der nativen Planung/
   /// Stornierung einer Erinnerungs-Benachrichtigung für eine anhaltend
@@ -477,6 +486,7 @@ class TrackRecordingService {
     // Eintrag nie erreicht, wodurch selbst das Diagnose-Protokoll darüber
     // keine Auskunft mehr hätte geben können.
     unawaited(DiagnosticLogService.instance.log('Aufzeichnung gestartet'));
+    stepCounter?.beginSession();
 
     // NEU (siehe README Abschnitt 38): Wurde die VORHERIGE Aufzeichnung
     // erst vor sehr kurzer Zeit beendet, wird hier kurz gewartet, bevor
@@ -1014,6 +1024,7 @@ class TrackRecordingService {
       final wasAutoPaused = _autoPaused;
       _autoPaused = false;
       if (wasAutoPaused) {
+        stepCounter?.pauseSession();
         // Manuell "verfestigte" Pause: GPS-Stream beenden wie bei jeder
         // manuellen Pause.
         await _subscription?.cancel();
@@ -1040,6 +1051,8 @@ class TrackRecordingService {
       _subscription = null;
     }
     _pauseStartedAt = DateTime.now();
+    // Nur manuelle Pausen schließen Schritte aus (siehe stepCounter).
+    if (!_autoPaused) stepCounter?.pauseSession();
     _resumeSpeedStreak = 0;
     _state = RecordingState.paused;
     _updatesController.add(null);
@@ -1106,6 +1119,7 @@ class TrackRecordingService {
     _autoPaused = false;
     _resumeSpeedStreak = 0;
     _gpsStandstillSince = null;
+    stepCounter?.resumeSession();
     if (manual) {
       _manualResumeGraceUntil = DateTime.now().add(_manualResumeGracePeriod);
     }
@@ -1150,6 +1164,7 @@ class TrackRecordingService {
     await _deleteCheckpointIfExists();
     final wasActive = _state != RecordingState.idle;
     final recordedElapsed = elapsed;
+    final recordedSteps = stepCounter?.endSession();
     final start = _startTime;
     _autoPaused = false;
     _manualResumeGraceUntil = null;
@@ -1176,6 +1191,7 @@ class TrackRecordingService {
       points: List.of(_points),
       distanceMeters: _distanceMeters,
       recordedDuration: recordedElapsed,
+      steps: recordedSteps,
     );
   }
 
@@ -1196,6 +1212,7 @@ class TrackRecordingService {
     await _cancelReminder();
     // NEU: siehe Kommentar in stop().
     await _deleteCheckpointIfExists();
+    stepCounter?.endSession();
     unawaited(DiagnosticLogService.instance.log('Verworfen (${_points.length} Punkte)'));
     _points.clear();
     _distanceMeters = 0;

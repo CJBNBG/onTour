@@ -107,6 +107,8 @@ class OnTourApplication : Application() {
         setupNavigationChannel(flutterEngine)
         setupGeomagneticChannel(flutterEngine)
         setupAltitudeChannel(flutterEngine)
+        // NEU (README Abschnitt 72): Schrittzähler-Kanäle.
+        StepCounterBridge.register(applicationContext, flutterEngine)
     }
 
     /**

@@ -29,6 +29,11 @@ class RecordedTrack {
   /// endTime.difference(startTime), da das Pausen mit einschließen würde.
   final Duration recordedDuration;
 
+  /// NEU (README Abschnitt 72): Schritte während der Aufzeichnung (ohne
+  /// manuelle Pausen) - null, wenn nicht gezählt wurde (kein Sensor, keine
+  /// Berechtigung, importierter oder älterer Track).
+  final int? steps;
+
   RecordedTrack({
     required this.id,
     required this.name,
@@ -37,6 +42,7 @@ class RecordedTrack {
     required this.points,
     required this.distanceMeters,
     required this.recordedDuration,
+    this.steps,
   });
 
   Map<String, dynamic> toJson() => {
@@ -46,6 +52,7 @@ class RecordedTrack {
         'endTime': endTime.toIso8601String(),
         'distanceMeters': distanceMeters,
         'recordedDurationSeconds': recordedDuration.inSeconds,
+        if (steps != null) 'steps': steps,
         'points': points.map((p) => p.toJson()).toList(),
       };
 
@@ -63,6 +70,7 @@ class RecordedTrack {
                   .difference(DateTime.parse(json['startTime'] as String))
                   .inSeconds,
         ),
+        steps: (json['steps'] as num?)?.toInt(),
         points: (json['points'] as List)
             .map((p) => TrackPoint.fromJson(p as Map<String, dynamic>))
             .toList(),

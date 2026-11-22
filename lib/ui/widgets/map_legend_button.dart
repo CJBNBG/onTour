@@ -1,5 +1,6 @@
 import 'package:auto_hyphenating_text/auto_hyphenating_text.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:ontour/models/route_overlay.dart';
 
 import '../../services/app_preferences.dart';
 import '../../util/external_link.dart';
@@ -65,7 +66,7 @@ class MapLegendButton extends StatelessWidget {
                       hints: style.legendHints,
                       url: style.legendUrl,
                     ),
-                    if (overlay.isActive)
+                    if (overlay.isActive && overlay != RouteOverlay.camping)
                       _section(
                         context,
                         title: overlay.label,
@@ -95,6 +96,31 @@ class MapLegendButton extends StatelessWidget {
                       Icon(Icons.flag, color: theme.colorScheme.primary),
                       'Ende eines gespeicherten Tracks',
                     ),
+                    if (preferences.campingEnabled) ...[
+                      const Divider(height: 32),
+                      AutoHyphenatingText('Camping und Stellplätze', style: theme.textTheme.titleMedium),
+                      const SizedBox(height: 8),
+                      _symbolRow(
+                        _campingSymbol(Icons.holiday_village, const Color(0xFF2E7D32)),
+                        'Campingplatz',
+                      ),
+                      _symbolRow(
+                        _campingSymbol(Icons.rv_hookup, const Color(0xFF1565C0)),
+                        'Stellplatz für Wohnmobile',
+                      ),
+                      if (preferences.campingBackcountry)
+                        _symbolRow(
+                          _campingSymbol(Icons.forest, const Color(0xFF6D4C41)),
+                          'Wildcampen (einfache Zeltplätze ohne Ausstattung)',
+                        ),
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4),
+                        child: AutoHyphenatingText(
+                          'Marker erscheinen ab Zoomstufe 9. Daten: OpenCampingMap, © OpenStreetMap-Mitwirkende.',
+                          style: theme.textTheme.bodySmall,
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -141,6 +167,20 @@ class MapLegendButton extends StatelessWidget {
             ),
         ],
       ),
+    );
+  }
+
+  /// Kleines rundes Symbol wie auf der Karte (siehe CampingMarkerLayer).
+  Widget _campingSymbol(IconData icon, Color color) {
+    return Container(
+      width: 28,
+      height: 28,
+      decoration: BoxDecoration(
+        color: color,
+        shape: BoxShape.circle,
+        border: Border.all(color: Colors.white, width: 2),
+      ),
+      child: Icon(icon, size: 16, color: Colors.white),
     );
   }
 

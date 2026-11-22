@@ -8,6 +8,10 @@ den größten Teil des Bildschirms ein.
 **Hinweis:** Die App zielt bewusst ausschließlich auf Android - es gibt
 keine iOS-Konfiguration und keine iOS-spezifischen Anpassungen.
 
+Die Camping- und Stellplatzdaten (Release camping-data und assets/camping/) 
+stammen von OpenCampingMap, Daten © OpenStreetMap-Mitwirkende, Lizenz ODbL. 
+Der Quellcode steht unter der MIT-Lizenz.
+
 ## 1. Projekt anlegen und Dateien übernehmen
 
 Da dieses Paket nur den Dart-Code (`lib/`), `pubspec.yaml` sowie eine
@@ -3459,3 +3463,100 @@ Wortlaut bleibt zentral in `util/navigation_notice.dart`, der Dialog beim
 Start (Abschnitt 70) ist unverändert und immer vollständig sichtbar.
 
 **Betroffene Dateien:** `lib/ui/info_page.dart`.
+
+## 72. Schrittzähler (Profil Wandern, Kachel "Schritte")
+
+**Frage:** Schritte nur während einer Track-Aufzeichnung oder ganztägig zählen?
+**Beides geht** - es ist derselbe Sensor, nur eine andere Differenz. Die
+Zählweise wählt man unter Einstellungen -> Start -> "Schrittzähler"
+(`StepCountMode`, Standard ganztägig, persistiert in `AppPreferences`).
+
+**Sensor:** `TYPE_STEP_COUNTER` (Gesamtzahl seit Geräte-Neustart, native Seite
+`StepCounterBridge.kt`, Kanäle `ontour/steps` und `ontour/steps_stream`, in
+`OnTourApplication` registriert). Keine neue Paketabhängigkeit.
+
+**Berechnung (`services/step_counter_service.dart`):**
+- Aufzeichnung = Zählerstand jetzt minus Zählerstand beim Start, abzüglich der
+  Schritte während MANUELLER Pausen. Automatische Stillstands-Pausen zählen mit
+  (im Stand kommen kaum Schritte, bei GPS-Verlust aber echte). Das Ergebnis
+  steht in der Kachel, auf dem Details-Tab der Track-Seite und - gespeichert
+  als `RecordedTrack.steps` - in der Detailansicht des Tracks.
+- Tageszahl = Zählerstand jetzt minus Zählerstand von Mitternacht. Ein
+  `AlarmManager`-Alarm (`StepMidnightReceiver`, `setAndAllowWhileIdle`, keine
+  Sonderberechtigung) merkt sich den Stand kurz nach 00:00 Uhr, auch wenn die
+  App nicht läuft. `StepBootReceiver` plant ihn nach Neustart/Update neu (nur,
+  wenn die Funktion je aktiviert wurde).
+
+**Anzeige in Echtzeit (Nachtrag):** Der Hardware-Zähler meldet auf vielen Geräten
+nur in Paketen alle paar Sekunden - die Anzeige sprang zögerlich. Deshalb
+läuft zusätzlich der Sensor `TYPE_STEP_DETECTOR` (ein Ereignis je Schritt, ohne
+Batching). Jeder Schritt wird sofort vorgemerkt (`_pending`), jede
+Zähler-Meldung rechnet die vorgemerkten Schritte wieder ein - so zählt die
+Anzeige live mit, nichts wird doppelt gezählt und der Zähler bleibt die
+verbindliche Quelle (Tageszahl, Mitternachts-Snapshot). Meldungen des Kanals
+`ontour/steps_stream` sind jetzt Maps `{t: 'c'|'s', v: ...}`.
+
+**Genauigkeit der Tageszahl** (Zeile unter dem Wert): "Heute" = exakt;
+"seit Neustart des Geräts" = Gerät wurde heute neu gestartet, frühere Schritte
+fehlen; "ab erster Messung" = kein Mitternachts-Snapshot vorhanden (z. B.
+Installation heute, Alarm durch Hersteller-Akkuverwaltung verhindert).
+
+**Grenzen (ehrlich):** Laut Android zählt der Sensor "while activated" - auf
+manchen Geräten nur, solange irgendeine App ihn aktiv hält (Samsung Health,
+Google Fit tun das auf den meisten Geräten). Ganztägig ist daher nur so
+zuverlässig wie der Sensor des Geräts. Doze kann den Mitternachts-Alarm um
+Minuten verschieben. Eine Aufzeichnung, die ein Prozessende nur über den
+Checkpoint übersteht (Abschnitt 30.4), hat keine Schrittzahl.
+
+**Berechtigung:** `ACTIVITY_RECOGNITION` (Laufzeit, ab Android 10) und
+`RECEIVE_BOOT_COMPLETED` (normal) im Manifest. Abgefragt wird erst beim
+Antippen der Kachel (nie automatisch); bei dauerhafter Ablehnung öffnet das
+Antippen die App-Einstellungen. Die Info-Seite erklärt die Berechtigung. Für
+den Play Store: Berechtigungsdeklaration/Datenschutzangaben (Schritte bleiben
+lokal) und ggf. die Health-Apps-Deklaration prüfen.
+
+**Profil:** `SlotType.steps` ist im Katalog für alle Profile verfügbar und in
+der Standardbelegung von "Wandern" (nach dem Kompass). Wer die Belegung von
+"Wandern" schon angepasst hat, ergänzt sie unter Einstellungen -> Start
+("Anzeige hinzufügen") oder mit "Standard wiederherstellen".
+
+**Neue/geänderte Dateien:** `models/step_count_mode.dart` (NEU),
+`services/step_counter_service.dart` (NEU), `native_android/.../StepCounterBridge.kt`,
+`StepMidnightReceiver.kt`, `StepBootReceiver.kt` (NEU), `OnTourApplication.kt`,
+`AndroidManifest.xml`, `models/user_profile.dart`, `models/recorded_track.dart`,
+`services/app_preferences.dart`, `services/live_data_service.dart`,
+`services/track_recording_service.dart`, `util/track_formatter.dart`,
+`ui/home_shell.dart`, `ui/start_page.dart`, `ui/settings_page.dart`,
+`ui/track_page.dart`, `ui/track_detail_page.dart`, `ui/info_page.dart`.
+
+**Zu prüfen auf dem Gerät:** Berechtigungsdialog, Wert nach einigen Schritten,
+Schritte in einer Aufzeichnung inkl. manueller Pause, Tageswechsel,
+Tageszahl nach Neustart.
+
+## 73. Start bleibt nach dem Play-Store-Update am Launcher-Icon hängen (Fehlerkorrektur)
+
+**Beobachtung:** Nach einem Update über den Play Store blieb der erste Start am
+Launcher-Icon auf weißem Grund stehen; nach Wegwischen und erneutem Start lief
+die App normal.
+
+**Vermutete Ursache (nicht bewiesen, aber passend zu allen Beobachtungen):**
+Durch die persistente Engine (Abschnitt 21) läuft `main()` schon bei jedem
+Prozessstart - auch wenn Android den Prozess OHNE Activity startet. Das tut es
+nach einem Update (`MY_PACKAGE_REPLACED`), nach einem Neustart
+(`BOOT_COMPLETED`) und bei Alarmen (Mitternachts-Snapshot, Pause-Erinnerung) -
+die Receiver des Schrittzählers (Abschnitt 72) machen das häufiger.
+`SystemChrome.setPreferredOrientations` braucht eine Activity; ohne sie wirft der
+Aufruf eine Exception, `main()` bricht vor `runApp()` ab, der Prozess bleibt
+aber am Leben. Öffnet man die App dann, hängt die Activity an einer Engine, in
+der Dart nie gestartet ist. Wegwischen beendet den Prozess, der nächste Start
+ist ein normaler Kaltstart.
+
+**Korrektur:** Der Aufruf in `main.dart` steht jetzt in try/catch (die
+Hochkant-Sperre steht zusätzlich im Manifest).
+
+**Prüfen:** Gerät neu starten und die App öffnen (ohne die Korrektur wäre das
+ein Auslöser gewesen), danach ein weiteres Update über den Play Store. Bleibt
+das Hängen bestehen, hilft ein `adb logcat`-Mitschnitt direkt nach dem Update
+(Zeilen mit `E/flutter`).
+
+**Betroffene Dateien:** `lib/main.dart`.
