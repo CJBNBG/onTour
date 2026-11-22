@@ -1,0 +1,24 @@
+name: Camping-Daten aktualisieren
+on:
+  schedule:
+    - cron: '30 4 * * *'   # täglich 04:30 UTC
+  workflow_dispatch:        # Button "Run workflow" zum Testen
+permissions:
+  contents: write
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Weltdatei laden
+        run: curl -fsSL -o all-sites-latest.json.gz https://opencampingmap.org/download/all-sites-latest.json.gz
+      - name: Europa filtern
+        run: python3 tool/europe_filter.py
+      - name: Release aktualisieren
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view camping-data >/dev/null 2>&1 || gh release create camping-data \
+            --title "Camping-Daten" \
+            --notes "Täglich erzeugt aus OpenCampingMap. Daten © OpenStreetMap-Mitwirkende (ODbL)."
+          gh release upload camping-data europe-camping.json.gz --clobber
