@@ -77,10 +77,12 @@ enum TrackLocationAvailability {
 /// NICHT mehr ab, wenn die App in den Hintergrund wechselt (z. B. weil
 /// währenddessen kurz eine andere App wie Google Maps zur Navigation
 /// geöffnet wird). Betroffen ist ausschließlich der GPS-Stream während
-/// `RecordingState.recording` - während einer Pause (automatisch oder
-/// manuell) wird der Stream wie bisher komplett beendet, wodurch auch
-/// die Benachrichtigung verschwindet (bewusst so, siehe [_pauseInternal]
-/// - spart während einer Pause Akku).
+/// `RecordingState.recording` - während einer MANUELLEN Pause wird der
+/// Stream komplett beendet, wodurch auch die Benachrichtigung
+/// verschwindet (bewusst so, siehe [_pauseInternal] - spart Akku). Bei
+/// einer AUTOMATISCHEN Pause (Stillstand) läuft er dagegen weiter, damit
+/// das Wiederanfahren erkannt wird; es werden dann aber keine Punkte
+/// gespeichert.
 class TrackRecordingService {
   /// NEU (siehe README Abschnitt 37): Öffentlich, damit die
   /// Genauigkeits-Anzeige auf der Track-Seite (`AccuracyBadge`) die hier
@@ -340,7 +342,7 @@ class TrackRecordingService {
   /// so keine Pause.
   static const Duration _gpsStandstillConfirmDuration = Duration(seconds: 8);
 
-  /// Ab dieser GPS-Geschwindigkeit (1,0 m/s = 3,6 km/h) - bewusst hoeher
+  /// Ab dieser GPS-Geschwindigkeit (0,8 m/s = 2,9 km/h) - bewusst hoeher
   /// als die Pausenschwelle (Hysterese) - wird eine automatische Pause
   /// aufgehoben, aber erst nach [_gpsResumeConfirmations] aufeinander-
   /// folgenden Messwerten (GPS-Ausreisser im Stand).

@@ -72,19 +72,19 @@ class TrackProfileCharts extends StatelessWidget {
               if (profile[i].altitudeMeters != null) Offset(distancesKm[i], profile[i].altitudeMeters!),
           ],
         ),
-        const SizedBox(height: 28),
-        ProfileChart(
-          title: 'Anstiegsprofil (Höhenänderung seit Start)',
-          distanceUnit: distanceUnit,
-          color: scheme.tertiary,
-          unit: 'm',
-          showZeroLine: true,
-          valueFormatter: _formatSigned,
-          points: [
-            for (var i = 0; i < profile.length; i++)
-              if (profile[i].netAltitudeChangeMeters != null) Offset(distancesKm[i], profile[i].netAltitudeChangeMeters!),
-          ],
-        ),
+        // const SizedBox(height: 28),
+        // ProfileChart(
+        //   title: 'Anstiegsprofil (Höhenänderung seit Start)',
+        //   distanceUnit: distanceUnit,
+        //   color: scheme.tertiary,
+        //   unit: 'm',
+        //   showZeroLine: true,
+        //   valueFormatter: _formatSigned,
+        //   points: [
+        //     for (var i = 0; i < profile.length; i++)
+        //       if (profile[i].netAltitudeChangeMeters != null) Offset(distancesKm[i], profile[i].netAltitudeChangeMeters!),
+        //   ],
+        // ),
         const SizedBox(height: 28),
         ProfileChart(
           title: 'Steigung / Gefälle',

@@ -26,8 +26,7 @@ enum RouteOverlay {
     creditsLine: 'Routen-Overlay: Waymarked Trails (waymarkedtrails.org, Sarah '
         'Hoffmann), Lizenz CC-BY-SA. Daten: © OpenStreetMap-Mitwirkende.',
     usageNote: 'Kostenloser Dienst eines Einzelprojekts - bitte zurückhaltend '
-        'nutzen, kein Massen-Download. Bei größerer Nutzerzahl den Betreiber '
-        'kontaktieren.',
+        'nutzen, kein Massen-Download.',
     infoUrl: 'https://hiking.waymarkedtrails.org',
     legendUrl: 'https://hiking.waymarkedtrails.org',
     legendHints: [
@@ -47,8 +46,7 @@ enum RouteOverlay {
     creditsLine: 'Routen-Overlay: Waymarked Trails (waymarkedtrails.org, Sarah '
         'Hoffmann), Lizenz CC-BY-SA. Daten: © OpenStreetMap-Mitwirkende.',
     usageNote: 'Kostenloser Dienst eines Einzelprojekts - bitte zurückhaltend '
-        'nutzen, kein Massen-Download. Bei größerer Nutzerzahl den Betreiber '
-        'kontaktieren.',
+        'nutzen, kein Massen-Download.',
     infoUrl: 'https://cycling.waymarkedtrails.org',
     legendUrl: 'https://cycling.waymarkedtrails.org',
     legendHints: [
@@ -89,8 +87,9 @@ enum RouteOverlay {
     ],
     creditsLine: 'Camping- und Stellplatzdaten: OpenCampingMap '
         '(opencampingmap.org, Sven Geggus). Daten: © OpenStreetMap-Mitwirkende (ODbL).',
-    usageNote: 'Die Daten sind fest in der App enthalten und können veraltet '
-        'oder unvollständig sein. Fehlende Angaben lassen sich in '
+    usageNote: 'Die Daten sind in der App enthalten und lassen sich auf der Start-Seite oder in den '
+        'Einstellungen (Karten) aktualisieren. Sie können veraltet oder '
+        'unvollständig sein. Fehlende Angaben lassen sich in '
         'OpenStreetMap nachtragen.',
     infoUrl: 'https://opencampingmap.org',
     legendUrl: 'https://opencampingmap.org',

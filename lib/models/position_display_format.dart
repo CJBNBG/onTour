@@ -1,6 +1,6 @@
 /// Vom Nutzer in den Einstellungen (Unterreiter "Anzeige", siehe README
 /// Abschnitt 25) wählbares Anzeigeformat für die aktuelle Position auf
-/// der Kompass-Seite (siehe CompassPage, util/coordinate_formatter.dart).
+/// der Start-Seite (Position-Kachel, siehe StartPage, util/coordinate_formatter.dart).
 ///
 /// DMS war bislang die einzige, fest einprogrammierte Darstellung - je
 /// nach Hintergrund (Seefahrt, klassisches Wandern, digitale

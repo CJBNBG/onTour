@@ -8,8 +8,8 @@ import '../models/position_display_format.dart';
 /// `geolocator`/GPS geliefert werden) in verschiedenen, in Outdoor-/
 /// Nautik-/Vermessungs-Kreisen gebräuchlichen Darstellungen - wählbar über
 /// [PositionDisplayFormat] auf der Einstellungsseite (Unterreiter
-/// "Anzeige", siehe README Abschnitt 25). Verwendet auf der Kompass-Seite
-/// für die aktuelle Position (siehe CompassPage).
+/// "Anzeige", siehe README Abschnitt 25). Verwendet auf der Start-Seite
+/// für die aktuelle Position (siehe StartPage, Position-Kachel).
 class CoordinateFormatter {
   static final NumberFormat _dmsSecondsFormat = NumberFormat('00.0', 'de_DE');
   static final NumberFormat _dmmMinutesFormat = NumberFormat('00.000', 'de_DE');

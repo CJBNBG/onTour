@@ -51,7 +51,7 @@ enum UserProfile {
   ),
 
   sailor(
-    label: 'Segler',
+    label: 'Segler und Bootsführer',
     shortLabel: 'Segeln',
     icon: Icons.sailing,
     defaultUnit: SpeedUnit.knots,
@@ -89,7 +89,7 @@ enum UserProfile {
   /// des gewählten Profils gespeichert wird (siehe AppPreferences) - eine
   /// Umbenennung würde die gespeicherte Wahl ungültig machen.
   camper(
-    label: 'Reisen',
+    label: 'Wohnmobilisten und Camper',
     shortLabel: 'Reisen',
     icon: Icons.rv_hookup,
     defaultUnit: SpeedUnit.kilometersPerHour,

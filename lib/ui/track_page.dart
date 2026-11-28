@@ -110,8 +110,9 @@ class _TrackPageState extends State<TrackPage> with SingleTickerProviderStateMix
 
   /// true, solange die Nordausrichtung "eingerastet" ist - siehe
   /// NorthLockButton fuer die genaue Bedeutung. Bewusst NICHT persistiert
-  /// (siehe README Abschnitt 5), startet also bei jedem Seitenaufruf neu
-  /// im freien, drehbaren Ausgangszustand.
+  /// (siehe README Abschnitt 5), startet bei jedem Seitenaufruf neu im
+  /// eingerasteten Zustand (Norden oben). Die Track-Detailansicht startet
+  /// dagegen frei drehbar.
   bool _northLocked = true;
 
   /// NEU (siehe README Abschnitt 37): Letzte bekannte Punktezahl - dient

@@ -10,7 +10,10 @@ import '../../services/camping_data_service.dart';
 class CampingDataSection extends StatefulWidget {
   final AppPreferences preferences;
 
-  const CampingDataSection({super.key, required this.preferences});
+  /// true: nur Datenstand + Button (für die Kachel "Kartenvorwahl").
+  final bool compact;
+
+  const CampingDataSection({super.key, required this.preferences, this.compact = false});
 
   @override
   State<CampingDataSection> createState() => _CampingDataSectionState();
@@ -65,6 +68,34 @@ class _CampingDataSectionState extends State<CampingDataSection> {
         } else {
           label = 'Jetzt aktualisieren';
         }
+
+        // Bewusst normales Text-Widget im Button (siehe README Abschnitt 13).
+        final button = FilledButton.tonalIcon(
+          onPressed: (_busy || _updatedToday) ? null : _update,
+          icon: _busy
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.refresh),
+          label: Text(label),
+        );
+
+        // Kompakte Variante für die Kachel "Kartenvorwahl".
+        if (widget.compact) {
+          return Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Camping-Daten · Stand: ${_service.dataDateText}', style: theme.textTheme.bodySmall),
+              const SizedBox(height: 4),
+              button,
+            ],
+          );
+        }
+
+        // Vollständige Variante (Einstellungen → Karten).
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -81,18 +112,7 @@ class _CampingDataSectionState extends State<CampingDataSection> {
               style: theme.textTheme.bodySmall,
             ),
             const SizedBox(height: 8),
-            // Bewusst normales Text-Widget im Button (siehe README Abschnitt 13).
-            FilledButton.tonalIcon(
-              onPressed: (_busy || _updatedToday) ? null : _update,
-              icon: _busy
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.refresh),
-              label: Text(label),
-            ),
+            button,
           ],
         );
       },

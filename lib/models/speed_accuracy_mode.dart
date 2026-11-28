@@ -11,8 +11,9 @@ import 'package:geolocator/geolocator.dart';
 /// (`widgets/accuracy_badge.dart`) auf Kompass- und Track-Seite - dort
 /// jeweils passend zur dort tatsächlich fest verwendeten
 /// `LocationAccuracy` ermittelt (siehe [fromLocationAccuracy]), NICHT
-/// über diese Einstellung selbst steuerbar (die gilt nach wie vor nur
-/// für die Tacho-Seite, siehe Abschnitt 4).
+/// über diese Einstellung selbst steuerbar (die gilt nur
+/// für die Tacho-Seite und die Tempo-Anzeige der Start-Seite, siehe
+/// Abschnitt 4).
 enum SpeedAccuracyMode {
   batterySaving(
     label: 'Akkusparend',

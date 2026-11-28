@@ -167,8 +167,8 @@ class _CampingMarkerLayerState extends State<CampingMarkerLayer> {
                     ),
                     OutlinedButton.icon(
                       icon: const Icon(Icons.open_in_new),
-                      label: const Text('In OSM ansehen'),
-                      onPressed: () => openExternalLink('https://www.openstreetmap.org/${site.id}'),
+                      label: const Text('In OpenCampingMap ansehen'),
+                      onPressed: () => openExternalLink(site.openCampingMapUrl),
                     ),
                     if (website != null)
                       OutlinedButton.icon(

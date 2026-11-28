@@ -1,12 +1,12 @@
-[22.11.2026 22:01:07,72] Build gestartet in C:\EigeneProgramme\flutter\ontour\
-[22.11.2026 22:01:07,79] Version 1.0.0, Build 35, Ziel onTour-1.0.0-35.aab
-[22.11.2026 22:01:07,81] gen-l10n uebersprungen (keine l10n.yaml)
-[22.11.2026 22:01:07,81] START: Projekt bereinigen (flutter clean)
-[22.11.2026 22:01:11,09] START: Paket-Cache reparieren (flutter pub cache repair)
-[22.11.2026 22:01:25,52] START: Pakete holen (flutter pub get)
-[22.11.2026 22:01:27,60] START: Pakete aktualisieren (flutter pub upgrade)
-[22.11.2026 22:01:30,17] START: Gradle bereinigen (gradlew clean)
-[22.11.2026 22:01:51,88] START: Gradle-Abhaengigkeiten neu laden (gradlew dependencies --refresh-dependencies)
-[22.11.2026 22:02:29,01] START: Gradle mit Configuration Cache (gradlew --configuration-cache)
-[22.11.2026 22:02:35,75] START: App Bundle bauen (flutter build appbundle --release)
-[22.11.2026 22:04:01,98] BUILD ERFOLGREICH: C:\EigeneProgramme\flutter\ontour\build\app\outputs\bundle\release\onTour-1.0.0-35.aab
+[27.11.2026 21:31:04,28] Build gestartet in C:\EigeneProgramme\flutter\ontour\
+[27.11.2026 21:31:04,35] Version 1.0.0, Build 39, Ziel onTour-1.0.0-39.aab
+[27.11.2026 21:31:04,35] gen-l10n uebersprungen (keine l10n.yaml)
+[27.11.2026 21:31:04,36] START: Projekt bereinigen (flutter clean)
+[27.11.2026 21:31:07,43] START: Paket-Cache reparieren (flutter pub cache repair)
+[27.11.2026 21:31:21,19] START: Pakete holen (flutter pub get)
+[27.11.2026 21:31:23,24] START: Pakete aktualisieren (flutter pub upgrade)
+[27.11.2026 21:31:26,14] START: Gradle bereinigen (gradlew clean)
+[27.11.2026 21:31:32,30] START: Gradle-Abhaengigkeiten neu laden (gradlew dependencies --refresh-dependencies)
+[27.11.2026 21:32:08,51] START: Gradle mit Configuration Cache (gradlew --configuration-cache)
+[27.11.2026 21:32:14,79] START: App Bundle bauen (flutter build appbundle --release)
+[27.11.2026 21:33:34,85] BUILD ERFOLGREICH: C:\EigeneProgramme\flutter\ontour\build\app\outputs\bundle\release\onTour-1.0.0-39.aab

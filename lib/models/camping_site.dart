@@ -66,6 +66,15 @@ class CampingSite {
 
   String get displayName => name ?? categoryLabel;
 
+  /// Link, der den Eintrag in OpenCampingMap aufschlägt (Karte zentriert,
+  /// Objekt ausgewählt). Für andere Objektarten als node/way nur die Position.
+  String get openCampingMapUrl {
+    final lat = latitude.toStringAsFixed(5);
+    final lon = longitude.toStringAsFixed(5);
+    final isObject = id.startsWith('node/') || id.startsWith('way/');
+    return 'https://opencampingmap.org/#17/$lat/$lon/0/1/bef${isObject ? '/$id' : ''}';
+  }
+
   PlaceResult toPlaceResult() => PlaceResult(
         name: displayName,
         displayName: '$displayName ($categoryLabel)',

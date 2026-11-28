@@ -6,7 +6,21 @@ class AppNavigationItem {
   final IconData icon;
   final String label;
 
-  const AppNavigationItem({required this.icon, required this.label});
+  /// Optionaler kleiner Statuspunkt oben rechts am Symbol (z. B. roter
+  /// Punkt bei laufender Aufzeichnung auf dem Karten-Tab). null = kein
+  /// Punkt.
+  final Color? badgeColor;
+
+  /// Zusatztext für Screenreader, wenn ein [badgeColor] gesetzt ist
+  /// (z. B. "Aufzeichnung läuft").
+  final String? badgeLabel;
+
+  const AppNavigationItem({
+    required this.icon,
+    required this.label,
+    this.badgeColor,
+    this.badgeLabel,
+  });
 }
 
 /// Untere Navigationsleiste im Stil der Material-3-NavigationBar, aber mit
@@ -73,7 +87,7 @@ class _NavItem extends StatelessWidget {
     return Semantics(
       button: true,
       selected: selected,
-      label: item.label,
+      label: item.badgeColor != null && item.badgeLabel != null ? '${item.label}, ${item.badgeLabel}' : item.label,
       excludeSemantics: true,
       child: InkResponse(
         onTap: onTap,
@@ -91,9 +105,30 @@ class _NavItem extends StatelessWidget {
                   color: selected ? scheme.secondaryContainer : Colors.transparent,
                   borderRadius: BorderRadius.circular(16),
                 ),
-                child: Icon(
-                  item.icon,
-                  color: selected ? scheme.onSecondaryContainer : scheme.onSurfaceVariant,
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    Icon(
+                      item.icon,
+                      color: selected ? scheme.onSecondaryContainer : scheme.onSurfaceVariant,
+                    ),
+                    // Statuspunkt oben rechts am Symbol; der Rand in der
+                    // Farbe der Leiste hebt ihn vom Symbol ab.
+                    if (item.badgeColor != null)
+                      Positioned(
+                        top: 3,
+                        right: 17,
+                        child: Container(
+                          width: 12,
+                          height: 12,
+                          decoration: BoxDecoration(
+                            color: item.badgeColor,
+                            shape: BoxShape.circle,
+                            border: Border.all(color: scheme.surfaceContainer, width: 2),
+                          ),
+                        ),
+                      ),
+                  ],
                 ),
               ),
               const SizedBox(height: 4),

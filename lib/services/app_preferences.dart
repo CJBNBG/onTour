@@ -53,6 +53,42 @@ class AppPreferences extends ChangeNotifier {
   /// util/navigation_notice.dart). ERHÖHEN, wenn sich der Hinweis inhaltlich
   /// wesentlich ändert - dann muss ihn jeder Nutzer erneut bestätigen.
   static const int currentNavigationNoticeVersion = 1;
+  static const _profileMapStyleKeyPrefix = 'profileMapStyle_';
+  static const _profileMapOverlayKeyPrefix = 'profileMapOverlay_';
+
+  final Map<UserProfile, MapStyle> _profileMapStyles = {};
+  final Map<UserProfile, RouteOverlay> _profileMapOverlays = {};
+
+  MapStyle mapPresetStyleFor(UserProfile p) => _profileMapStyles[p] ?? p.mapStyle ?? MapStyle.standard;
+
+  RouteOverlay mapPresetOverlayFor(UserProfile p) => _profileMapOverlays[p] ?? p.routeOverlay ?? RouteOverlay.none;
+
+  bool isMapPresetCustomized(UserProfile p) => _profileMapStyles.containsKey(p) || _profileMapOverlays.containsKey(p);
+
+  String mapPresetDescriptionFor(UserProfile p) {
+    final overlay = mapPresetOverlayFor(p);
+    return [mapPresetStyleFor(p).label, if (overlay.isActive) overlay.label].join(' \nEinblendung: ');
+  }
+
+  Future<void> setMapPresetFor(UserProfile profile, {required MapStyle style, required RouteOverlay overlay}) async {
+    _profileMapStyles[profile] = style;
+    _profileMapOverlays[profile] = overlay;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('$_profileMapStyleKeyPrefix${profile.name}', style.name);
+    await prefs.setString('$_profileMapOverlayKeyPrefix${profile.name}', overlay.name);
+    if (profile == _userProfile) await applyMapPreset(profile);
+  }
+
+  Future<void> resetMapPresetFor(UserProfile profile) async {
+    _profileMapStyles.remove(profile);
+    _profileMapOverlays.remove(profile);
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('$_profileMapStyleKeyPrefix${profile.name}');
+    await prefs.remove('$_profileMapOverlayKeyPrefix${profile.name}');
+    if (profile == _userProfile) await applyMapPreset(profile);
+  }
 
   ThemeMode _themeMode = ThemeMode.system;
   SpeedUnit _speedUnit = SpeedUnit.kilometersPerHour;
@@ -289,6 +325,18 @@ class AppPreferences extends ChangeNotifier {
         }
         if (parsed.isNotEmpty) _slots[profile] = parsed;
       }
+      final storedStyle = prefs.getString('$_profileMapStyleKeyPrefix${profile.name}');
+      if (storedStyle != null) {
+        for (final s in MapStyle.values) {
+          if (s.name == storedStyle) _profileMapStyles[profile] = s;
+        }
+      }
+      final storedOverlay = prefs.getString('$_profileMapOverlayKeyPrefix${profile.name}');
+      if (storedOverlay != null) {
+        for (final o in RouteOverlay.values) {
+          if (o.name == storedOverlay) _profileMapOverlays[profile] = o;
+        }
+      }
     }
 
     final storedAltitudeOffset = prefs.getDouble(_altitudeManualOffsetKey);
@@ -356,15 +404,20 @@ class AppPreferences extends ChangeNotifier {
 
   /// NEU (README Abschnitt 56): Wählt das Profil der Start-Seite und stellt
   /// die dafür zuletzt verwendete (sonst die Standard-)Tempo-Einheit ein.
-  /// Karte und Overlays bleiben dabei unberührt - dafür gibt es die
-  /// Kartenvorwahl ([applyMapPreset]).
+  /// Karte und Overlays werden direkt gesetzt -
+  /// Kartenvorwahl ist jetzt überflüssig geworden ([applyMapPreset]).
   Future<void> setUserProfile(UserProfile profile) async {
     _userProfile = profile;
     _speedUnit = _profileUnits[profile] ?? profile.defaultUnit;
+    // Kartenvorwahl des Profils direkt mit übernehmen.
+    _mapStyle = mapPresetStyleFor(profile);
+    _routeOverlay = mapPresetOverlayFor(profile);
     notifyListeners();
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_userProfileKey, profile.name);
     await prefs.setString(_speedUnitKey, _speedUnit.name);
+    await prefs.setString(_mapStyleKey, _mapStyle.name);
+    await prefs.setString(_routeOverlayKey, _routeOverlay.name);
   }
 
   /// Ändert die Slot-Belegung eines Profils (Einstellungen → Start, siehe
@@ -419,20 +472,14 @@ class AppPreferences extends ChangeNotifier {
 
   /// true, wenn Basiskarte, Routen-Overlay und Seemarken bereits der
   /// Kartenvorwahl von [profile] entsprechen.
-  bool isMapPresetActive(UserProfile profile) {
-    final style = profile.mapStyle;
-    if (style == null) return false;
-    return _mapStyle == style && _routeOverlay == (profile.routeOverlay ?? RouteOverlay.none);
-  }
+  bool isMapPresetActive(UserProfile profile) => _mapStyle == mapPresetStyleFor(profile) && _routeOverlay == mapPresetOverlayFor(profile);
 
   /// Setzt Basiskarte, Routen-Overlay und Seemarken auf die Kartenvorwahl
   /// von [profile] (gilt wie jede Kartenwahl für Track-Seite und
   /// Track-Detailansicht).
   Future<void> applyMapPreset(UserProfile profile) async {
-    final style = profile.mapStyle;
-    if (style == null) return;
-    _mapStyle = style;
-    _routeOverlay = profile.routeOverlay ?? RouteOverlay.none;
+    _mapStyle = mapPresetStyleFor(profile);
+    _routeOverlay = mapPresetOverlayFor(profile);
     notifyListeners();
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_mapStyleKey, _mapStyle.name);

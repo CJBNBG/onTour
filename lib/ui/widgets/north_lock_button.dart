@@ -17,8 +17,9 @@ import 'package:material_ui/material_ui.dart';
 /// Rein darstellend - das eigentliche Drehen der Karte sowie das
 /// Aktivieren/Deaktivieren der Dreh-Geste (über `InteractionOptions` in
 /// den jeweiligen `MapOptions`) obliegt der aufrufenden Seite, siehe
-/// [onToggle]. Standardzustand ist stets NICHT eingerastet (frei
-/// drehbar) - wird bewusst nicht persistiert, siehe README Abschnitt 5.
+/// [onToggle]. Den Anfangszustand legt die aufrufende Seite fest
+/// (Karten-Tab: eingerastet, Track-Detailansicht: frei drehbar) - er wird
+/// bewusst nicht persistiert, siehe README Abschnitt 5.
 class NorthLockButton extends StatelessWidget {
   final double rotationDegrees;
   final bool locked;

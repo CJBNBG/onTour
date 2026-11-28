@@ -17,6 +17,11 @@ import '../models/track_point.dart';
 /// zuständig) - das hält diese Klasse einfach testbar und unabhängig
 /// davon, woher der XML-Text kommt bzw. wohin er geschrieben wird.
 class GpxConverter {
+  /// Eigener Namensraum für die onTour-Erweiterung (GPX-`<extensions>`):
+  /// aktuell nur die Schrittzahl der Aufzeichnung. Andere Programme
+  /// ignorieren unbekannte Erweiterungen.
+  static const String _ontourNamespace = 'https://github.com/CJBNBG/onTour';
+
   /// Erzeugt aus einem [RecordedTrack] einen vollständigen, eigenständigen
   /// GPX-1.1-Dokumenttext (inkl. XML-Kopfzeile).
   static String encode(RecordedTrack track) {
@@ -41,6 +46,21 @@ class GpxConverter {
           'trk',
           nest: () {
             builder.element('name', nest: track.name);
+            // Laut GPX-Schema stehen <extensions> vor <trkseg>.
+            if (track.steps != null) {
+              builder.element(
+                'extensions',
+                nest: () {
+                  builder.element(
+                    'steps',
+                    nest: () {
+                      builder.attribute('xmlns', _ontourNamespace);
+                      builder.text(track.steps.toString());
+                    },
+                  );
+                },
+              );
+            }
             builder.element(
               'trkseg',
               nest: () {
@@ -141,6 +161,12 @@ class GpxConverter {
         gpxElement.getElement('metadata')?.getElement('name')?.innerText ??
         fallbackName;
 
+    // Schrittzahl aus der onTour-Erweiterung (fehlt bei fremden GPX-Dateien
+    // und bei älteren Exporten - dann null).
+    final stepsText = gpxElement.getElement('trk')?.getElement('extensions')?.getElement('steps')?.innerText.trim();
+    final parsedSteps = stepsText == null ? null : int.tryParse(stepsText);
+    final steps = (parsedSteps != null && parsedSteps >= 0) ? parsedSteps : null;
+
     var distanceMeters = 0.0;
     for (var i = 1; i < points.length; i++) {
       distanceMeters += Geolocator.distanceBetween(
@@ -162,6 +188,7 @@ class GpxConverter {
       points: points,
       distanceMeters: distanceMeters,
       recordedDuration: endTime.difference(startTime),
+      steps: steps,
     );
   }
 }

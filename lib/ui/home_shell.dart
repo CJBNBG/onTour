@@ -77,7 +77,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
   // Anzeigen des gewählten Profils (siehe README Abschnitt 56).
   int _selectedIndex = 0;
 
-  /// Index des Track-Tabs - als benannte Konstante, damit
+  /// Index des Karten-Tabs (früher "Track") - als benannte Konstante, damit
   /// [_checkPendingNavigation] nicht mit einer "magischen" Zahl arbeitet.
   /// (Seit Abschnitt 56 an dritter Stelle, Index 3.)
   // static const _startTabIndex = 0;
@@ -86,7 +86,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
   static const _trackTabIndex = 3;
   // static const _settingsTabIndex = 4;
 
-  /// Vollbild-Zustand der Karte auf der Track-Seite. Wird hier EINMAL
+  /// Vollbild-Zustand der Karte auf dem Karten-Tab (früher "Track"). Wird hier EINMAL
   /// gehalten (nicht bei jedem Aufbau neu erzeugt!) und an TrackPage
   /// durchgereicht: TrackPage schaltet ihn ein/aus, HomeShell blendet
   /// darüber AppBar, Statuszeile und Navigationsleiste aus.
@@ -107,7 +107,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
   /// über alle Seiten hinweg.
   final StepCounterService _stepCounterService = StepCounterService();
 
-  static const _titles = ['Start', 'Tacho', 'Kompass', 'Track', 'Einstellungen'];
+  static const _titles = ['Start', 'Tacho', 'Kompass', 'Karte', 'Einstellungen'];
 
   /// Siehe Klassenkommentar (Abschnitt 23) - Methodenname auf nativer
   /// Seite muss exakt übereinstimmen (OnTourApplication.kt).
@@ -189,7 +189,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
       builder: (context, _) {
         final profile = widget.preferences.userProfile;
         final page = _titles[_selectedIndex];
-        final title = profile == null ? page : '$page – ${profile.shortLabel}';
+        final title = profile == null ? page : profile.label;
         return FittedBox(
           fit: BoxFit.scaleDown,
           alignment: Alignment.centerLeft,
@@ -238,19 +238,54 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
           body: _buildPage(_selectedIndex),
           // Fünf Einträge: AppNavigationBar trennt lange Beschriftungen
           // ("Einstellungen") per Silbentrennung, statt sie abzuschneiden.
-          bottomNavigationBar: hideBars
-              ? null
-              : AppNavigationBar(
-                  selectedIndex: _selectedIndex,
-                  onSelected: (index) => setState(() => _selectedIndex = index),
-                  items: const [
-                    AppNavigationItem(icon: Icons.dashboard, label: 'Start'),
-                    AppNavigationItem(icon: Icons.speed, label: 'Tacho'),
-                    AppNavigationItem(icon: Icons.explore, label: 'Kompass'),
-                    AppNavigationItem(icon: Icons.route, label: 'Track'),
-                    AppNavigationItem(icon: Icons.settings, label: 'Einstellungen'),
-                  ],
-                ),
+          bottomNavigationBar: hideBars ? null : _buildNavigationBar(),
+        );
+      },
+    );
+  }
+
+  /// Untere Navigationsleiste. Der Karten-Tab (früher "Track") zeigt am
+  /// Symbol einen kleinen Statuspunkt: rot = es wird aufgezeichnet, orange =
+  /// Aufzeichnung pausiert. Der Punkt hört auf die Updates des
+  /// TrackRecordingService; nur die Leiste wird dafür neu aufgebaut. Bei
+  /// einer Unterbrechung (siehe TrackRecordingService.interruptionReason)
+  /// erscheint - wie beim Aufzeichnungs-Indikator der Start-Seite - kein
+  /// roter, sondern ein Punkt in der Fehlerfarbe.
+  Widget _buildNavigationBar() {
+    return StreamBuilder<void>(
+      stream: _trackRecordingService.updates,
+      builder: (context, _) {
+        final recording = _trackRecordingService.state;
+        final scheme = Theme.of(context).colorScheme;
+        Color? badgeColor;
+        String? badgeLabel;
+        if (recording != RecordingState.idle) {
+          if (_trackRecordingService.interruptionReason != null) {
+            badgeColor = scheme.error;
+            badgeLabel = 'Aufzeichnung unterbrochen';
+          } else if (recording == RecordingState.recording) {
+            badgeColor = Colors.red;
+            badgeLabel = 'Aufzeichnung läuft';
+          } else {
+            badgeColor = Colors.orange;
+            badgeLabel = 'Aufzeichnung pausiert';
+          }
+        }
+        return AppNavigationBar(
+          selectedIndex: _selectedIndex,
+          onSelected: (index) => setState(() => _selectedIndex = index),
+          items: [
+            const AppNavigationItem(icon: Icons.dashboard, label: 'Start'),
+            const AppNavigationItem(icon: Icons.speed, label: 'Tacho'),
+            const AppNavigationItem(icon: Icons.explore, label: 'Kompass'),
+            AppNavigationItem(
+              icon: Icons.map,
+              label: 'Karte',
+              badgeColor: badgeColor,
+              badgeLabel: badgeLabel,
+            ),
+            const AppNavigationItem(icon: Icons.settings, label: 'Einstellungen'),
+          ],
         );
       },
     );

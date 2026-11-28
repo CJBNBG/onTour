@@ -21,10 +21,11 @@ import '../util/track_formatter.dart';
 import '../models/step_count_mode.dart';
 import 'widgets/compass_dial.dart';
 import 'widgets/recording_indicator.dart';
+import 'widgets/camping_data_section.dart';
 
 /// Start-/Übersichtsseite (siehe README Abschnitt 56/57): Links eine
 /// vertikale Leiste mit den Profilen (Wandern / Segeln / Rad-Moto /
-/// Wohnmobil / Eigene), rechts die zum gewählten Profil gehörenden
+/// Reisen / Eigene), rechts die zum gewählten Profil gehörenden
 /// Anzeigen ("Slots") als Kacheln. Das gewählte Profil ist in der Leiste
 /// hervorgehoben und wird über [AppPreferences] gespeichert.
 ///
@@ -151,7 +152,7 @@ class _StartPageState extends State<StartPage> {
 
   /// Vertikale Leiste links, unten darunter der Aufzeichnungs-Indikator
   /// (roter Punkt bzw. Pause-Symbol, nur bei laufender/pausierter
-  /// Aufzeichnung; Antippen öffnet die Track-Seite). Die Umhüllung des
+  /// Aufzeichnung; Antippen öffnet den Karten-Tab). Die Umhüllung des
   /// Rails aus SingleChildScrollView/IntrinsicHeight ist das in der
   /// Flutter-Dokumentation beschriebene Muster, damit die Leiste auf sehr
   /// niedrigen Displays scrollt statt überzulaufen.
@@ -232,17 +233,7 @@ class _StartPageState extends State<StartPage> {
   }
 
   Widget _buildContent(BuildContext context, UserProfile profile) {
-    final theme = Theme.of(context);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(4, 0, 4, 8),
-          child: AutoHyphenatingText(profile.label, style: theme.textTheme.titleMedium),
-        ),
-        Expanded(child: _buildGrid(context, profile)),
-      ],
-    );
+    return _buildGrid(context, profile);
   }
 
   /// Wählt anhand der Einstellung (und bei "Automatisch" anhand der
@@ -272,15 +263,15 @@ class _StartPageState extends State<StartPage> {
     );
   }
 
-  double _compactHeightOf(SlotType slot) {
-    switch (slot) {
-      case SlotType.position:
-        return _compactTallTileHeight;
-      case SlotType.mapPreset:
-        return _compactMapTileHeight;
-      default:
-        return _compactTileHeight;
-    }
+  double _compactHeightOf(BuildContext context, SlotType slot) {
+    final base = switch (slot) {
+      SlotType.position => _compactTallTileHeight,
+      SlotType.mapPreset => _compactMapTileHeight,
+      _ => _compactTileHeight,
+    };
+    // Faktor der Systemschrift (S23 Ultra: oft > 1.0)
+    final scale = (MediaQuery.textScalerOf(context).scale(14) / 14).clamp(1.0, 1.6).toDouble();
+    return base * scale;
   }
 
   /// Eine Spalte: flache Kacheln für Textwerte, die Kompassrose erhält den
@@ -296,28 +287,35 @@ class _StartPageState extends State<StartPage> {
     const spacing = 8.0;
     var fixedSum = 0.0;
     for (final slot in slots) {
-      if (slot != SlotType.compass) fixedSum += _compactHeightOf(slot);
+      if (slot != SlotType.compass) fixedSum += _compactHeightOf(context, slot);
     }
     final remaining = constraints.maxHeight - fixedSum - spacing * (slots.length - 1);
-    final compassHeight = math.min(380.0, math.max(200.0, remaining));
+    final maxCompass = math.min(constraints.maxWidth, 700.0);
+    final compassHeight = math.min(maxCompass, math.max(200.0, remaining));
+    // final compassHeight = math.min(380.0, math.max(200.0, remaining));
 
     return SingleChildScrollView(
-      child: Column(
-        children: [
-          for (var i = 0; i < slots.length; i++)
-            Padding(
-              padding: EdgeInsets.only(top: i == 0 ? 0 : spacing),
-              child: SizedBox(
-                height: slots[i] == SlotType.compass ? compassHeight : _compactHeightOf(slots[i]),
-                child: _buildSlot(
-                  context,
-                  profile,
-                  slots[i],
-                  compact: slots[i] != SlotType.compass,
-                ),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(minHeight: constraints.maxHeight),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            for (var i = 0; i < slots.length; i++)
+              Padding(
+                padding: EdgeInsets.only(top: i == 0 ? 0 : spacing),
+                child: slots[i] == SlotType.compass
+                    ? SizedBox(
+                        height: compassHeight,
+                        child: _buildSlot(context, profile, slots[i], compact: false),
+                      )
+                    : ConstrainedBox(
+                        constraints: BoxConstraints(minHeight: _compactHeightOf(context, slots[i])),
+                        child: _buildSlot(context, profile, slots[i], compact: true),
+                      ),
               ),
-            ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -331,7 +329,7 @@ class _StartPageState extends State<StartPage> {
     BoxConstraints constraints,
   ) {
     const spacing = 8.0;
-    const minTileHeight = 130.0;
+    final minTileHeight = 130.0 * (MediaQuery.textScalerOf(context).scale(14) / 14).clamp(1.0, 1.6);
     final rows = (slots.length / 2).ceil();
     final fitted = (constraints.maxHeight - spacing * (rows - 1)) / rows;
     final tileHeight = math.max(minTileHeight, fitted);
@@ -436,16 +434,14 @@ class _StartPageState extends State<StartPage> {
     );
   }
 
-  /// Rahmen der flachen Kacheln (einspaltiges Layout): Symbol und
-  /// Beschriftung (mit optionaler Zeile darunter) links, [trailing]
-  /// (Wert) rechtsbündig.
   Widget _compactTile(
     BuildContext context, {
     required SlotType slot,
-    required Widget trailing,
+    Widget? trailing,
+    Widget? footer,
     String? subtitle,
     bool subtitleIsError = false,
-    int subtitleMaxLines = 2,
+    int subtitleMaxLines = 3,
     int leftFlex = 5,
     int rightFlex = 5,
     VoidCallback? onTap,
@@ -459,56 +455,64 @@ class _StartPageState extends State<StartPage> {
         onTap: onTap,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          child: Row(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Icon(slot.icon, color: theme.colorScheme.primary),
-              const SizedBox(width: 10),
-              Expanded(
-                flex: leftFlex,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
+              Row(
+                children: [
+                  Icon(slot.icon, color: theme.colorScheme.primary),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    flex: leftFlex,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Flexible(
-                          child: Text(
-                            slot.label,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: theme.textTheme.labelLarge,
-                          ),
+                        Row(
+                          children: [
+                            Flexible(
+                              child: Text(slot.label, maxLines: 2, overflow: TextOverflow.ellipsis, style: theme.textTheme.labelLarge),
+                            ),
+                            if (headerTrailing != null) ...[
+                              const SizedBox(width: 6),
+                              headerTrailing,
+                            ],
+                          ],
                         ),
-                        if (headerTrailing != null) ...[
-                          const SizedBox(width: 6),
-                          headerTrailing,
-                        ],
+                        if (subtitle != null)
+                          Text(
+                            subtitle,
+                            maxLines: subtitleMaxLines,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: subtitleIsError ? theme.colorScheme.error : null,
+                            ),
+                          ),
                       ],
                     ),
-                    if (subtitle != null)
-                      Text(
-                        subtitle,
-                        maxLines: subtitleMaxLines,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: subtitleIsError ? theme.colorScheme.error : null,
+                  ),
+                  if (trailing != null) ...[
+                    const SizedBox(width: 8),
+                    Expanded(
+                      flex: rightFlex,
+                      child: Align(
+                        alignment: Alignment.centerRight,
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          alignment: Alignment.centerRight,
+                          child: trailing,
                         ),
                       ),
+                    ),
                   ],
-                ),
+                ],
               ),
-              const SizedBox(width: 8),
-              Expanded(
-                flex: rightFlex,
-                child: Align(
-                  alignment: Alignment.centerRight,
-                  child: FittedBox(
-                    fit: BoxFit.scaleDown,
-                    alignment: Alignment.centerRight,
-                    child: trailing,
-                  ),
-                ),
-              ),
+              if (footer != null) ...[
+                const SizedBox(height: 8),
+                footer,
+              ],
             ],
           ),
         ),
@@ -1016,42 +1020,18 @@ class _StartPageState extends State<StartPage> {
 
   Widget _buildMapPresetTile(BuildContext context, UserProfile profile, bool compact) {
     final theme = Theme.of(context);
-    final hasPreset = profile.mapStyle != null;
-    final active = widget.preferences.isMapPresetActive(profile);
-
-    Widget action = const SizedBox.shrink();
-    if (hasPreset) {
-      action = active
-          ? Row(
-              mainAxisSize: MainAxisSize.min,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.check_circle_outline, size: 18, color: theme.colorScheme.primary),
-                const SizedBox(width: 6),
-                Text('Aktiv', style: theme.textTheme.labelLarge),
-              ],
-            )
-          : FilledButton.tonal(
-              onPressed: () async {
-                await widget.preferences.applyMapPreset(profile);
-                if (!context.mounted) return;
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Karte für die Track-Seite gesetzt.')),
-                );
-              },
-              child: const Text('Übernehmen'),
-            );
-    }
+    final prefs = widget.preferences;
+    final description = prefs.mapPresetDescriptionFor(profile);
+    // Aktualisieren-Button nur, solange das Camping-Overlay eingeblendet ist.
+    final Widget? campingUpdate = prefs.campingEnabled ? CampingDataSection(preferences: prefs, compact: true) : null;
 
     if (compact) {
       return _compactTile(
         context,
         slot: SlotType.mapPreset,
-        subtitle: profile.mapPresetDescription,
-        subtitleMaxLines: 3,
-        leftFlex: 6,
-        rightFlex: 4,
-        trailing: action,
+        subtitle: description,
+        subtitleMaxLines: 6,
+        footer: campingUpdate,
       );
     }
 
@@ -1063,7 +1043,7 @@ class _StartPageState extends State<StartPage> {
           Expanded(
             child: Center(
               child: Text(
-                profile.mapPresetDescription,
+                description,
                 textAlign: TextAlign.center,
                 maxLines: 5,
                 overflow: TextOverflow.ellipsis,
@@ -1071,7 +1051,10 @@ class _StartPageState extends State<StartPage> {
               ),
             ),
           ),
-          action,
+          if (campingUpdate != null) ...[
+            const SizedBox(height: 8),
+            campingUpdate,
+          ],
         ],
       ),
     );

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:auto_hyphenating_text/auto_hyphenating_text.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
@@ -11,21 +13,20 @@ Future<void> main() async {
 
   // Anforderung: Es wird nur das Hochkantformat genutzt.
   //
-  // WICHTIG (README Abschnitt 73): Bewusst in try/catch. main() läuft dank der
-  // persistenten Engine schon beim Prozessstart - auch dann, wenn Android den
-  // Prozess ohne Activity startet (Alarm, Boot-/Update-Receiver). Ohne
-  // Activity gibt es keinen Handler für diesen Aufruf, er wirft dann eine
-  // MissingPluginException; ohne try/catch bräche main() vor runApp() ab und
-  // die App bliebe später am Launcher-Icon hängen. Die Hochkant-Sperre steht
+  // WICHTIG (README Abschnitt 73): Bewusst NICHT awaited. main() läuft dank
+  // der persistenten Engine schon beim Prozessstart - auch dann, wenn Android
+  // den Prozess ohne Activity startet (z. B. Update-/Boot-Receiver). Ohne
+  // Activity ist der Handler für diesen Aufruf noch nicht registriert, und die
+  // Android-Seite antwortet dann gar nicht (weder Erfolg noch Fehler): Ein
+  // `await` würde nie zurückkehren, main() käme nie zu runApp(), und die App
+  // bliebe später am Launcher-Icon hängen. Die Hochkant-Sperre steht
   // ohnehin zusätzlich im Manifest (screenOrientation="portrait").
-  try {
-    await SystemChrome.setPreferredOrientations([
+  unawaited(
+    SystemChrome.setPreferredOrientations([
       DeviceOrientation.portraitUp,
       DeviceOrientation.portraitDown,
-    ]);
-  } catch (_) {
-    // Siehe oben - ohne Activity wirkungslos, aber unschädlich.
-  }
+    ]).catchError((Object _) {}),
+  );
 
   // Lädt die Trennmuster für die automatische Silbentrennung (deutsche
   // Rechtschreibung nach der Reform von 1996) - wird von AutoHyphenatingText

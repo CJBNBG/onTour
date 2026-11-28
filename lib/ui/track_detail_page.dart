@@ -1,14 +1,18 @@
+import 'dart:async';
+
 import 'package:auto_hyphenating_text/auto_hyphenating_text.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 
+import '../models/camping_site.dart';
 import '../models/recorded_track.dart';
 import '../services/app_preferences.dart';
 import '../services/track_import_export_service.dart';
 import '../services/track_storage_service.dart';
 import '../util/track_formatter.dart';
 import '../util/track_profile_calculator.dart';
+import 'widgets/camping_marker_layer.dart';
 import 'widgets/map_tile_layers.dart';
 import 'widgets/map_legend_button.dart';
 import 'widgets/map_style_button.dart';
@@ -78,7 +82,7 @@ class _TrackDetailPageState extends State<TrackDetailPage> with SingleTickerProv
   /// NorthLockButton fuer die genaue Bedeutung. Bewusst NICHT persistiert
   /// (siehe README Abschnitt 5), startet also bei jedem Seitenaufruf neu
   /// im freien, drehbaren Ausgangszustand.
-  bool _northLocked = false;
+  bool _northLocked = true;
 
   @override
   void initState() {
@@ -113,6 +117,16 @@ class _TrackDetailPageState extends State<TrackDetailPage> with SingleTickerProv
     if (bounds == null || !_mapReady) return;
     _mapController.fitCamera(
       CameraFit.bounds(bounds: bounds, padding: const EdgeInsets.all(48)),
+    );
+  }
+
+  /// Übernimmt einen Camping-/Stellplatz aus den Kartenmarkern als Ziel
+  /// (wie auf dem Karten-Tab) - dort erscheint es dann samt Luftlinie.
+  Future<void> _setDestinationFromCamping(CampingSite site) async {
+    await widget.preferences.setDestination(site.toPlaceResult());
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Ziel gesetzt: ${site.displayName}. Es erscheint auf dem Karten-Tab.')),
     );
   }
 
@@ -269,6 +283,11 @@ class _TrackDetailPageState extends State<TrackDetailPage> with SingleTickerProv
                       ),
                     ],
                   ),
+                  if (widget.preferences.campingEnabled)
+                    CampingMarkerLayer(
+                      includeBackcountry: widget.preferences.campingBackcountry,
+                      onSetDestination: (site) => unawaited(_setDestinationFromCamping(site)),
+                    ),
                   MarkerLayer(
                     markers: [
                       Marker(

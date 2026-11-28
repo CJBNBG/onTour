@@ -2,23 +2,20 @@ package de.clausjbauer.ontour
 
 import android.content.Context
 import android.content.Intent
-import android.location.GnssStatus
-import android.location.LocationManager
-import android.os.Build
 import android.os.Bundle
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.embedding.engine.FlutterEngineCache
-import io.flutter.plugin.common.EventChannel
 
 /**
  * Haupt-Activity von onTour.
  *
- * AUFGABE 1 - Satellitenanzahl (siehe README Abschnitt 3): registriert
- * einen EventChannel ("ontour/gnss_satellite_count"), der die Anzahl der
- * für den aktuellen Fix verwendeten Satelliten liefert (Android GNSS-
- * Status-API, `LocationManager.registerGnssStatusCallback`, ab API 24) -
- * weder `geolocator` noch iOS/CoreLocation stellen das bereit.
+ * AUFGABE 1 - Satellitenanzahl (siehe README Abschnitt 3): GEÄNDERT - der
+ * EventChannel "ontour/gnss_satellite_count" wird nicht mehr hier, sondern
+ * in OnTourApplication (setupGnssChannel) registriert. Grund: Er hängt
+ * dort am applicationContext statt an dieser Activity und überlebt damit
+ * deren Zerstörung (z. B. Wischen aus den zuletzt verwendeten Apps), wie
+ * auch die Schrittzähler-Kanäle (siehe README Abschnitt 22).
  *
  * AUFGABE 2 - NEU, persistente FlutterEngine (siehe README Abschnitt 21):
  * Damit eine laufende Track-Aufzeichnung ein Entfernen der App aus der
@@ -64,9 +61,6 @@ class MainActivity : FlutterActivity() {
          *  AutoPauseReminderReceiver.kt verwendeten Namen übereinstimmen. */
         const val EXTRA_OPEN_TRACK_TAB = "open_track_tab"
     }
-
-    private var gnssStatusCallback: GnssStatus.Callback? = null
-    private var locationManager: LocationManager? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -122,49 +116,5 @@ class MainActivity : FlutterActivity() {
         // Standardimplementierung geht davon aus, dass DIESE Activity die
         // Engine besitzt und beim Trennen aufräumen muss - hier ist das
         // Gegenteil gewollt (siehe shouldDestroyEngineWithHost).
-    }
-
-    override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
-        super.configureFlutterEngine(flutterEngine)
-
-        EventChannel(flutterEngine.dartExecutor.binaryMessenger, "ontour/gnss_satellite_count")
-            .setStreamHandler(object : EventChannel.StreamHandler {
-                override fun onListen(arguments: Any?, events: EventChannel.EventSink) {
-                    startGnssStatusUpdates(events)
-                }
-
-                override fun onCancel(arguments: Any?) {
-                    stopGnssStatusUpdates()
-                }
-            })
-    }
-
-    private fun startGnssStatusUpdates(events: EventChannel.EventSink) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) {
-            // GnssStatus.Callback benötigt mindestens API 24 - auf
-            // älteren Geräten bleibt der Stream einfach leer (siehe
-            // SatelliteService, das dann "nicht verfügbar" anzeigt).
-            return
-        }
-        val manager = getSystemService(Context.LOCATION_SERVICE) as? LocationManager ?: return
-        locationManager = manager
-
-        val callback = object : GnssStatus.Callback() {
-            override fun onSatelliteStatusChanged(status: GnssStatus) {
-                var usedInFixCount = 0
-                for (i in 0 until status.satelliteCount) {
-                    if (status.usedInFix(i)) usedInFixCount++
-                }
-                events.success(usedInFixCount)
-            }
-        }
-        gnssStatusCallback = callback
-        manager.registerGnssStatusCallback(callback, null)
-    }
-
-    private fun stopGnssStatusUpdates() {
-        gnssStatusCallback?.let { locationManager?.unregisterGnssStatusCallback(it) }
-        gnssStatusCallback = null
-        locationManager = null
     }
 }

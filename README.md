@@ -3539,24 +3539,69 @@ Tageszahl nach Neustart.
 Launcher-Icon auf weißem Grund stehen; nach Wegwischen und erneutem Start lief
 die App normal.
 
-**Vermutete Ursache (nicht bewiesen, aber passend zu allen Beobachtungen):**
-Durch die persistente Engine (Abschnitt 21) läuft `main()` schon bei jedem
-Prozessstart - auch wenn Android den Prozess OHNE Activity startet. Das tut es
-nach einem Update (`MY_PACKAGE_REPLACED`), nach einem Neustart
-(`BOOT_COMPLETED`) und bei Alarmen (Mitternachts-Snapshot, Pause-Erinnerung) -
-die Receiver des Schrittzählers (Abschnitt 72) machen das häufiger.
-`SystemChrome.setPreferredOrientations` braucht eine Activity; ohne sie wirft der
-Aufruf eine Exception, `main()` bricht vor `runApp()` ab, der Prozess bleibt
-aber am Leben. Öffnet man die App dann, hängt die Activity an einer Engine, in
-der Dart nie gestartet ist. Wegwischen beendet den Prozess, der nächste Start
-ist ein normaler Kaltstart.
+**Ursache (aus dem logcat vom 23.11. abgeleitet):** Android beendet die App beim
+Update ("killDueToPackageUpdate") und startet den Prozess sofort wieder, und
+zwar OHNE Activity, für den Broadcast `MY_PACKAGE_REPLACED` (StepBootReceiver,
+Abschnitt 72; dasselbe passiert bei Neustart und bei Alarmen). Durch die
+persistente Engine (Abschnitt 21) läuft dabei `main()` bereits. Dort stand
+`await SystemChrome.setPreferredOrientations(...)`. Ohne Activity ist auf
+Android noch kein Handler für diesen Kanal registriert, und die Engine
+antwortet in diesem Fall gar nicht (weder Erfolg noch Fehler) - das `await`
+kehrt nie zurück, `runApp()` wird nie erreicht. Zwei Sekunden später öffnet der
+Nutzer die App, die Activity hängt sich an eine Engine ohne laufende
+Oberfläche: Im Log sieht man die Oberfläche (Surface) entstehen, aber keinen
+ersten Frame und keine Sensor-Anmeldung der Start-Seite. Weil keine Exception
+auftritt, erscheint auch keine Zeile `E/flutter`. Der erste Korrekturversuch
+(try/catch) half deshalb nicht.
 
-**Korrektur:** Der Aufruf in `main.dart` steht jetzt in try/catch (die
-Hochkant-Sperre steht zusätzlich im Manifest).
+**Korrektur:** Der Aufruf in `main.dart` wird nicht mehr awaited (`unawaited`);
+die Hochkant-Sperre steht zusätzlich im Manifest.
 
-**Prüfen:** Gerät neu starten und die App öffnen (ohne die Korrektur wäre das
-ein Auslöser gewesen), danach ein weiteres Update über den Play Store. Bleibt
-das Hängen bestehen, hilft ein `adb logcat`-Mitschnitt direkt nach dem Update
-(Zeilen mit `E/flutter`).
+**Prüfen:** Nach dem nächsten Update die App direkt aus dem Play Store öffnen -
+sie sollte sofort starten. Auch nach einem Neustart des Geräts.
 
 **Betroffene Dateien:** `lib/main.dart`.
+
+## 74. Start-Kacheln / Analog-Tacho-Design / Kartenvorwahl
+
+Start-Kacheln wachsen mit dem Text (Mindesthöhe × Systemschrift); Analog-Tacho-Skala nach außen verschoben (Bogen 0.90, Ticks 0.70–0.82); Kartenvorwahl je Profil in AppPreferences (profileMapStyle_*, profileMapOverlay_*) und in Einstellungen → Start wählbar.
+Profilwahl setzt Basiskarte und Overlay direkt (setUserProfile). Die Kachel „Kartenvorwahl“ zeigt nur die Vorwahl und bei aktivem Camping-Overlay den Daten-Update (CampingDataSection(compact: true)).
+
+## 75. Tab „Karte“ statt „Track“, Statuspunkt bei Aufzeichnung
+
+Der vierte Tab der Navigationsleiste heißt wieder Karte (Symbol Icons.map). Er enthält vor allem die Karte (Suche, Ziel, Ebenen, Legende, Vollbild, Camping-Marker). Die Aufzeichnung ist eine Funktion davon. Intern bleiben TrackPage, _trackTabIndex und TrackRecordingService unverändert, die Dateinamen ebenfalls.
+
+Statuspunkt: Am Tab-Symbol zeigt ein kleiner Punkt den Aufzeichnungszustand:
+
+rot: es wird aufgezeichnet
+orange: pausiert (manuell oder automatisch)
+Fehlerfarbe: unterbrochen (siehe interruptionReason, Abschnitt 65)
+kein Punkt: keine Aufzeichnung
+
+Der Punkt steht für den Zustand der Aufzeichnung selbst, nicht für das Blinken des Indikators auf der Start-Seite. Dafür hört HomeShell auf TrackRecordingService.updates, und nur die Navigationsleiste wird neu aufgebaut. AppNavigationItem hat dazu die optionalen Felder badgeColor und badgeLabel (Text für Screenreader).
+
+Warum nicht „Track“ oder Icons.route: „Track“ meint Tab, Aufzeichnung und Liste zugleich. Icons.route suggeriert Routenführung und kollidiert mit dem Hinweis „keine Navigation“ (Abschnitt 70). Außerdem steht es schon für gespeicherte Tracks.
+
+## 76. GPX-Export mit Schrittzahl
+
+Die Schrittzahl einer Aufzeichnung (Abschnitt 72) wird beim GPX-Export als Erweiterung gespeichert:
+
+xml
+<trk>
+  <name>…</name>
+  <extensions>
+    <steps xmlns="https://github.com/CJBNBG/onTour">12345</steps>
+  </extensions>
+  <trkseg>…</trkseg>
+</trk>
+<extensions> steht laut GPX-Schema vor <trkseg>. Andere Programme ignorieren die unbekannte Angabe.
+Der Import liest die Zahl wieder ein. Fehlt sie (fremde Datei, älterer Export) oder ist sie ungültig, bleibt steps leer.
+Damit stimmt die Aussage der Info-Seite, dass die Schrittzahl mit einer Aufzeichnung exportiert werden kann.
+
+## 77. Camping-Marker in der Track-Detailansicht
+
+Ist die Einblendung „Camping und Stellplätze“ aktiv, zeigt auch TrackDetailPage die Marker (CampingMarkerLayer). „Als Ziel setzen“ speichert das Ziel in AppPreferences und meldet das per SnackBar. Es erscheint dann auf dem Karten-Tab.
+
+## 78. Satellitenanzahl: Kanal in OnTourApplication (erst nach dem Gerätetest übernehmen)
+
+Der EventChannel ontour/gnss_satellite_count wird nicht mehr in MainActivity, sondern in OnTourApplication.setupGnssChannel registriert. Er arbeitet dort mit dem applicationContext und überlebt damit die Zerstörung der Activity (Wischen aus den zuletzt verwendeten Apps), wie auch die Schrittzähler-Kanäle (Abschnitt 72). Fehlt die Standortberechtigung, meldet der Stream einen Fehler, und DeviceStatusService versucht es regelmäßig neu. MainActivity enthält keine GNSS-Logik mehr.

@@ -143,12 +143,12 @@ class _GaugePainter extends CustomPainter {
       radius,
       Paint()
         ..style = PaintingStyle.stroke
-        ..strokeWidth = radius * 0.001
+        ..strokeWidth = radius * 0.01
         ..color = accentColor,
     );
 
     // Fortschrittsbogen unter dem Zeiger
-    final arcRadius = radius * 0.80;
+    final arcRadius = radius * 0.95;
     final arcRect = Rect.fromCircle(center: center, radius: arcRadius);
     canvas.drawArc(
       arcRect,
@@ -188,8 +188,8 @@ class _GaugePainter extends CustomPainter {
       final isMajor = i % minorPerMajor == 0;
       final v = i * majorStep / minorPerMajor;
       final angle = _angleFor(v);
-      final outer = _point(center, radius * 0.72, angle);
-      final inner = _point(center, radius * (isMajor ? 0.60 : 0.66), angle);
+      final outer = _point(center, radius * 0.82, angle);
+      final inner = _point(center, radius * (isMajor ? 0.70 : 0.76), angle);
       canvas.drawLine(
         inner,
         outer,
@@ -205,13 +205,13 @@ class _GaugePainter extends CustomPainter {
             text: v.round().toString(),
             style: TextStyle(
               color: onFaceColor,
-              fontSize: radius * (majorCount == 10 ? 0.11 : 0.13),
+              fontSize: radius * (majorCount == 10 ? 0.12 : 0.14),
               fontWeight: FontWeight.w600,
             ),
           ),
           textDirection: TextDirection.ltr,
         )..layout();
-        final p = _point(center, radius * 0.47, angle);
+        final p = _point(center, radius * 0.56, angle);
         painter.paint(canvas, p - Offset(painter.width / 2, painter.height / 2));
       }
     }
@@ -219,7 +219,7 @@ class _GaugePainter extends CustomPainter {
 
   void _drawNeedle(Canvas canvas, Offset center, double radius) {
     final angle = _angleFor(value);
-    final tip = _point(center, radius * 0.74, angle);
+    final tip = _point(center, radius * 0.84, angle);
     final tail = _point(center, radius * 0.12, angle + math.pi);
     final perp = angle + math.pi / 2;
     final halfWidth = radius * 0.035;

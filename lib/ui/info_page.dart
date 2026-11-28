@@ -7,8 +7,8 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../models/map_style.dart';
 import '../models/speed_unit.dart';
-//import '../models/route_overlay.dart';
 import '../services/diagnostic_log_service.dart';
+import '../util/external_link.dart';
 import '../util/navigation_notice.dart';
 import '../util/track_formatter.dart';
 
@@ -83,11 +83,14 @@ class _InfoPageState extends State<InfoPage> {
     ),
     _PermissionInfo(
       'Internet',
-      'Für die Kartenbilder und die Ortssuche. Kartenausschnitte, die du '
+      'Für die Kartenbilder, die Ortssuche und - nur auf Tipp - die '
+          'Aktualisierung der Camping-Daten. Kartenausschnitte, die du '
           'schon angesehen hast, merkt sich die App und zeigt sie auch ohne '
           'Netz. Deine Strecken und Positionen bleiben auf deinem Gerät. Bei '
           'den Kartenanbietern wird nur das gewünschte Kartengebiet abgefragt, '
-          'bei der Ortssuche der Suchbegriff.',
+          'bei der Ortssuche der Suchbegriff. Beim Aktualisieren der '
+          'Camping-Daten wird nur eine Datei heruntergeladen, es werden keine '
+          'Angaben von dir übertragen.',
     ),
   ];
 
@@ -97,6 +100,11 @@ class _InfoPageState extends State<InfoPage> {
   /// Format z. B. 'https://play.google.com/store/apps/dev?id=1234567890123456789'
   /// bzw. 'https://play.google.com/store/apps/developer?id=Name'.
   static const _playStoreDeveloperUrl = 'https://play.google.com/store/apps/developer?id=CJBNBG';
+
+  /// Link zur Datenschutzerklärung (PRIVACY.md im GitHub-Repository). LEER
+  /// lassen, solange der Link nicht feststeht: Dann wird der Button gar nicht
+  /// erst angezeigt. Muss derselbe Link sein wie in der Play Console.
+  static const _privacyPolicyUrl = 'https://github.com/CJBNBG/onTour/blob/master/PRIVACY.md';
 
   Future<void> _openPlayStoreDeveloperPage() async {
     var opened = false;
@@ -149,7 +157,7 @@ class _InfoPageState extends State<InfoPage> {
   /// NEU (siehe README Abschnitt 31): true, sobald eine nicht-leere
   /// Diagnose-Log-Datei existiert - in einem Release-Build (Play Store)
   /// immer false, da die Aufzeichnung dort gar nicht erst startet (siehe
-  /// OnTourApplication), der Button erscheint dementsprechend nur in
+  /// DiagnosticLogService.log), der Button erscheint dementsprechend nur in
   /// Debug-/Test-Builds.
   bool _hasDiagnosticLog = false;
 
@@ -282,6 +290,17 @@ class _InfoPageState extends State<InfoPage> {
                 ),
               ),
             ],
+            if (_privacyPolicyUrl.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: OutlinedButton.icon(
+                  onPressed: () => openExternalLink(_privacyPolicyUrl),
+                  icon: const Icon(Icons.privacy_tip_outlined),
+                  label: AutoHyphenatingText('Datenschutzerklärung'),
+                ),
+              ),
+            ],
             const SizedBox(height: 24),
             const Divider(),
             const SizedBox(height: 16),
@@ -384,7 +403,7 @@ class _InfoPageState extends State<InfoPage> {
             ),
             // NEU (siehe README Abschnitt 31): Nur sichtbar, wenn
             // tatsächlich eine Diagnose-Log-Datei existiert - das ist nur
-            // in Debug-/Test-Builds der Fall (siehe OnTourApplication),
+            // in Debug-/Test-Builds der Fall (siehe DiagnosticLogService),
             // in einem Release-Build für den Play Store bleibt dieser
             // gesamte Abschnitt unsichtbar.
             if (_hasDiagnosticLog) ...[

@@ -364,6 +364,63 @@ class _SettingsPageState extends State<SettingsPage> with SingleTickerProviderSt
               ),
           ],
         ),
+        const SizedBox(height: 32),
+        _buildMapPresetSection(context, profile),
+      ],
+    );
+  }
+
+  Widget _buildMapPresetSection(BuildContext context, UserProfile profile) {
+    final theme = Theme.of(context);
+    final prefs = widget.preferences;
+    final style = prefs.mapPresetStyleFor(profile);
+    final overlay = prefs.mapPresetOverlayFor(profile);
+    const padding = EdgeInsets.symmetric(horizontal: 12, vertical: 8);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        AutoHyphenatingText('Kartenvorwahl für „${profile.shortLabel}“', style: theme.textTheme.titleMedium),
+        const SizedBox(height: 8),
+        AutoHyphenatingText(
+          'Wenn auf der Start-Seite das Profil ${profile.shortLabel} wählst, '
+          'wird die hier eingestellte Karte mit der Einblendung aktiviert.',
+          style: theme.textTheme.bodySmall,
+        ),
+        const SizedBox(height: 12),
+        DropdownButtonFormField<MapStyle>(
+          key: ValueKey('presetStyle_${profile.name}_${style.name}'),
+          initialValue: style,
+          isExpanded: true,
+          decoration: const InputDecoration(labelText: 'Basiskarte', border: OutlineInputBorder(), contentPadding: padding),
+          items: [
+            for (final s in MapStyle.values) DropdownMenuItem(value: s, child: Text(s.label, overflow: TextOverflow.ellipsis)),
+          ],
+          onChanged: (v) {
+            if (v != null) prefs.setMapPresetFor(profile, style: v, overlay: overlay);
+          },
+        ),
+        const SizedBox(height: 12),
+        DropdownButtonFormField<RouteOverlay>(
+          key: ValueKey('presetOverlay_${profile.name}_${overlay.name}'),
+          initialValue: overlay,
+          isExpanded: true,
+          decoration: const InputDecoration(labelText: 'Einblenden', border: OutlineInputBorder(), contentPadding: padding),
+          items: [
+            for (final o in RouteOverlay.values) DropdownMenuItem(value: o, child: Text(o.label, overflow: TextOverflow.ellipsis)),
+          ],
+          onChanged: (v) {
+            if (v != null) prefs.setMapPresetFor(profile, style: style, overlay: v);
+          },
+        ),
+        if (prefs.isMapPresetCustomized(profile))
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton(
+              onPressed: () => prefs.resetMapPresetFor(profile),
+              child: const Text('Standard wiederherstellen'),
+            ),
+          ),
       ],
     );
   }
@@ -441,7 +498,7 @@ class _SettingsPageState extends State<SettingsPage> with SingleTickerProviderSt
   }
 
   /// NEU (siehe README Abschnitt 25): Auswahl des Anzeigeformats für die
-  /// aktuelle Position auf der Kompass-Seite (DMS/DMM/DD/UTM). Bewusst im
+  /// aktuelle Position auf der Start-Seite (DMS/DMM/DD/UTM). Bewusst im
   /// Unterreiter "Anzeige" (statt "Erweitert") untergebracht - anders als
   /// z. B. die Genauigkeitsstufe der Geschwindigkeitsmessung betrifft
   /// diese Wahl ausschließlich die Darstellung, nicht Akkuverbrauch oder
@@ -452,7 +509,7 @@ class _SettingsPageState extends State<SettingsPage> with SingleTickerProviderSt
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         AutoHyphenatingText(
-          'Positionsformat (Kompass-Seite)',
+          'Positionsformat (Start-Seite)',
           style: Theme.of(context).textTheme.titleMedium,
         ),
         const SizedBox(height: 8),
@@ -678,8 +735,9 @@ class _SettingsPageState extends State<SettingsPage> with SingleTickerProviderSt
               Expanded(
                 child: AutoHyphenatingText(
                   'Eine höhere Genauigkeit bzw. Aktualität kann den '
-                  'Akkuverbrauch spürbar erhöhen. Eine Änderung wirkt sich '
-                  'beim nächsten Öffnen der Tacho-Seite aus.',
+                  'Akkuverbrauch spürbar erhöhen. Die Einstellung gilt für die '
+                  'Tacho-Seite und die Tempo-Anzeige der Start-Seite und wirkt '
+                  'sich beim nächsten Öffnen dieser Seiten aus.',
                   style: TextStyle(
                     color: Theme.of(context).colorScheme.onSecondaryContainer,
                   ),

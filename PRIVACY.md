@@ -19,7 +19,7 @@ onTour benutzt kein Benutzerkonto, zeigt keine Werbung, nutzt keine Analyse- ode
 - **Gespeicherte Daten:** aufgezeichnete und importierte Tracks (Positionen, Höhen, Geschwindigkeiten, Zeitstempel, bei Aufzeichnung auch die Schrittzahl), Einstellungen (Profil, Einheiten, Kartenwahl, Ziel), der Luftdruck-Verlauf der letzten Stunden, ein Zwischenspeicher der laufenden Aufzeichnung, der Zeitpunkt der Bestätigung des Hinweises „keine Navigation" sowie zwischengespeicherte Kartenkacheln.
 - **Diagnose-Protokoll:** nur in Test-Versionen, nicht in der Version aus dem Play Store. Es wird nur weitergegeben, wenn du es selbst exportierst.
 
-Alle diese Daten bleiben auf deinem Gerät, bis du sie löschst oder die App deinstallierst. Weitergegeben wird nur, was du selbst exportierst oder teilst, zum Beispiel eine GPX-Datei über den Android-Teilen-Dialog. Die Schrittzahl wird im GPX-Export nicht mitgeschrieben.
+Alle diese Daten bleiben auf deinem Gerät, bis du sie löschst oder die App deinstallierst. Weitergegeben wird nur, was du selbst exportierst oder teilst, zum Beispiel eine GPX-Datei über den Android-Teilen-Dialog. Die Schrittzahl wird im GPX-Export mitgeschrieben.
 
 ## 4. Verbindungen ins Internet
 
@@ -70,7 +70,7 @@ Du hast das Recht auf Auskunft, Berichtigung, Löschung, Einschränkung der Vera
 
 ## 9. Kinder
 
-onTour richtet sich nicht gezielt an Kinder unter 16 Jahren.
+onTour richtet sich an Personen ab 16 Jahren. Da onTour keine personenbezogenen Daten an den Verantwortlichen übermittelt, werden auch von jüngeren Nutzern keine Daten erhoben.
 
 ## 10. Änderungen
 

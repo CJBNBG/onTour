@@ -3,12 +3,16 @@ package de.clausjbauer.ontour
 import android.app.Application
 import android.content.Context
 import android.hardware.GeomagneticField
+import android.location.GnssStatus
 import android.location.LocationManager
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.os.SystemClock
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.embedding.engine.FlutterEngineCache
 import io.flutter.embedding.engine.dart.DartExecutor
+import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodChannel
 
 /**
@@ -81,6 +85,11 @@ class OnTourApplication : Application() {
          *  Objekt - muss exakt mit AltitudeCorrection (Dart) uebereinstimmen. */
         private const val CHANNEL_ALTITUDE = "ontour/altitude"
 
+        /** Name des EventChannel fuer die Satellitenanzahl im Fix - muss
+         *  exakt mit dem Dart-seitigen Namen in SatelliteService
+         *  uebereinstimmen. */
+        private const val CHANNEL_GNSS = "ontour/gnss_satellite_count"
+
         /** Aelter als dieser Wert (ms) gilt der letzte bekannte Fix nicht
          *  mehr als brauchbar fuer die Geoid-Korrektur. */
         private const val MAX_FIX_AGE_MS = 10 * 60 * 1000L
@@ -107,6 +116,7 @@ class OnTourApplication : Application() {
         setupNavigationChannel(flutterEngine)
         setupGeomagneticChannel(flutterEngine)
         setupAltitudeChannel(flutterEngine)
+        setupGnssChannel(flutterEngine)
         // NEU (README Abschnitt 72): Schrittzähler-Kanäle.
         StepCounterBridge.register(applicationContext, flutterEngine)
     }
@@ -224,6 +234,57 @@ class OnTourApplication : Application() {
                     else -> result.notImplemented()
                 }
             }
+    }
+
+    /**
+     * Liefert die Anzahl der fuer den Fix verwendeten Satelliten (Android
+     * GNSS-Status-API, ab API 24) an SatelliteService. Bewusst hier und
+     * nicht in MainActivity: Der Handler haengt am applicationContext und
+     * ueberlebt damit die Zerstoerung der Activity (Wischen aus den
+     * zuletzt verwendeten Apps). Ein Abonnement wird bei onCancel sauber
+     * abgemeldet; fehlt die Standortberechtigung, meldet der Stream einen
+     * Fehler (DeviceStatusService versucht es dann regelmaessig neu).
+     */
+    private fun setupGnssChannel(flutterEngine: FlutterEngine) {
+        EventChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL_GNSS)
+            .setStreamHandler(GnssStreamHandler())
+    }
+
+    private inner class GnssStreamHandler : EventChannel.StreamHandler {
+        private var callback: GnssStatus.Callback? = null
+        private var manager: LocationManager? = null
+
+        override fun onListen(arguments: Any?, events: EventChannel.EventSink) {
+            stop()
+            // GnssStatus.Callback benoetigt mindestens API 24 - auf aelteren
+            // Geraeten bleibt der Stream einfach leer.
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) return
+            val lm = getSystemService(Context.LOCATION_SERVICE) as? LocationManager ?: return
+            val cb = object : GnssStatus.Callback() {
+                override fun onSatelliteStatusChanged(status: GnssStatus) {
+                    var used = 0
+                    for (i in 0 until status.satelliteCount) {
+                        if (status.usedInFix(i)) used++
+                    }
+                    events.success(used)
+                }
+            }
+            try {
+                lm.registerGnssStatusCallback(cb, Handler(Looper.getMainLooper()))
+                manager = lm
+                callback = cb
+            } catch (e: SecurityException) {
+                events.error("permission", "Standortberechtigung fehlt", null)
+            }
+        }
+
+        override fun onCancel(arguments: Any?) = stop()
+
+        private fun stop() {
+            callback?.let { manager?.unregisterGnssStatusCallback(it) }
+            callback = null
+            manager = null
+        }
     }
 
     private fun readMslAltitude(): Map<String, Any?> {
